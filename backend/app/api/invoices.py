@@ -336,6 +336,23 @@ def get_invoice(invoice_id: str, db: Session = Depends(get_db)):
     last_val = db.query(ValidationResult).filter(ValidationResult.invoice_id == invoice_id).order_by(desc(ValidationResult.id)).first()
     last_fraud = db.query(FraudAnalysis).filter(FraudAnalysis.invoice_id == invoice_id).order_by(desc(FraudAnalysis.id)).first()
 
+    gst_result = None
+    if last_ext and last_ext.raw_extraction:
+        try:
+            from app.services.gst import gst_calculation_node
+            raw = last_ext.raw_extraction
+            ext_data = raw.get("extracted_data") if isinstance(raw, dict) and "extracted_data" in raw else raw
+            conf = raw.get("confidence_scores", {}) if isinstance(raw, dict) else {}
+            gst_state = gst_calculation_node({
+                "invoice_id": invoice.id,
+                "extracted_data": ext_data,
+                "confidence_scores": conf,
+                "overall_confidence": last_ext.overall_confidence
+            })
+            gst_result = gst_state.get("gst_result")
+        except Exception:
+            gst_result = None
+
     return {
         "invoice": {
             "id": invoice.id,
@@ -357,7 +374,8 @@ def get_invoice(invoice_id: str, db: Session = Depends(get_db)):
         "items": invoice.items,
         "extraction": last_ext,
         "validation": last_val,
-        "fraud_analysis": last_fraud
+        "fraud_analysis": last_fraud,
+        "gst_result": gst_result
     }
 
 @router.delete("/{invoice_id}")

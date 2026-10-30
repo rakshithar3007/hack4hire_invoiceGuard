@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   FileText,
   Search,
@@ -24,13 +24,34 @@ import { useToast } from '../components/Toast';
 
 export const InvoicesPage: React.FC = () => {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { showToast } = useToast();
 
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [search, setSearch] = useState<string>('');
-  const [statusFilter, setStatusFilter] = useState<string>('ALL');
+  
+  const queryStatus = searchParams.get('status')?.toUpperCase() || 'ALL';
+  const [statusFilter, setStatusFilter] = useState<string>(queryStatus);
   const [riskFilter, setRiskFilter] = useState<string>('ALL');
+
+  useEffect(() => {
+    const q = searchParams.get('status')?.toUpperCase();
+    if (q) {
+      setStatusFilter(q);
+    }
+  }, [searchParams]);
+
+  const handleStatusChange = (val: string) => {
+    setStatusFilter(val);
+    const newParams = new URLSearchParams(searchParams);
+    if (val === 'ALL') {
+      newParams.delete('status');
+    } else {
+      newParams.set('status', val);
+    }
+    setSearchParams(newParams, { replace: true });
+  };
 
   // Delete modal state
   const [deleteId, setDeleteId] = useState<string | null>(null);
@@ -76,7 +97,12 @@ export const InvoicesPage: React.FC = () => {
       (inv.supplier_name && inv.supplier_name.toLowerCase().includes(s));
 
     if (!matchesSearch) return false;
-    if (statusFilter !== 'ALL' && inv.approval_status !== statusFilter) return false;
+    if (statusFilter !== 'ALL') {
+      const appStatus = (inv.approval_status || '').toUpperCase();
+      const target = statusFilter.toUpperCase();
+      const matches = appStatus === target || (target === 'PENDING' && appStatus === 'PENDING_APPROVAL');
+      if (!matches) return false;
+    }
     if (riskFilter !== 'ALL' && inv.fraud_status !== riskFilter) return false;
     return true;
   });
@@ -184,7 +210,7 @@ export const InvoicesPage: React.FC = () => {
             <label className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider">Status:</label>
             <select
               value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
+              onChange={(e) => handleStatusChange(e.target.value)}
               className="text-xs font-medium px-2.5 py-1.5 bg-white border border-[var(--border)] rounded text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent)] cursor-pointer"
             >
               <option value="ALL">All Statuses</option>

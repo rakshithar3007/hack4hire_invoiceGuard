@@ -88,8 +88,8 @@ export const dashboardApi = {
 // Reports & Export
 export const reportsApi = {
   getInvoices: (params?: any) => api.get('/reports/invoices', { params }),
-  exportCsvUrl: '/api/reports/export/csv',
-  exportPdfUrl: '/api/reports/export/pdf',
+  exportCsvUrl: `${API_BASE_URL}/reports/export/csv`,
+  exportPdfUrl: `${API_BASE_URL}/reports/export/pdf`,
 };
 
 // Audit Logs & Snapshots
@@ -100,7 +100,7 @@ export const auditApi = {
 
 export const snapshotApi = {
   get: (invoiceId: string, version?: number) => api.get(`/invoices/${invoiceId}/snapshot`, { params: { version } }),
-  downloadUrl: (invoiceId: string, version?: number) => `/api/invoices/${invoiceId}/snapshot/download${version ? `?version=${version}` : ''}`,
+  downloadUrl: (invoiceId: string, version?: number) => `${API_BASE_URL}/invoices/${invoiceId}/snapshot/download${version ? `?version=${version}` : ''}`,
 };
 
 // Notifications

@@ -10,7 +10,6 @@ import { DashboardPage } from './pages/DashboardPage';
 import { UploadPage } from './pages/UploadPage';
 import { InvoicesPage } from './pages/InvoicesPage';
 import { ExtractionPage } from './pages/ExtractionPage';
-import { ValidationPage } from './pages/ValidationPage';
 import { FraudDetectionPage } from './pages/FraudDetectionPage';
 import { ApprovalPage } from './pages/ApprovalPage';
 import { ReportsPage } from './pages/ReportsPage';
@@ -56,22 +55,7 @@ const AppRoutes: React.FC = () => {
           </MainLayout>
         }
       />
-      <Route
-        path="/validation"
-        element={
-          <MainLayout>
-            <ValidationPage />
-          </MainLayout>
-        }
-      />
-      <Route
-        path="/fraud"
-        element={
-          <MainLayout>
-            <FraudDetectionPage />
-          </MainLayout>
-        }
-      />
+      {/* Verification & Fraud Analysis (Consolidated) */}
       <Route
         path="/verification"
         element={
@@ -80,6 +64,11 @@ const AppRoutes: React.FC = () => {
           </MainLayout>
         }
       />
+      {/* Deprecated duplicate routes redirect to single canonical destination */}
+      <Route path="/validation" element={<Navigate to="/verification" replace />} />
+      <Route path="/fraud" element={<Navigate to="/verification" replace />} />
+
+      {/* Approval Center */}
       <Route
         path="/approvals"
         element={
@@ -88,14 +77,8 @@ const AppRoutes: React.FC = () => {
           </MainLayout>
         }
       />
-      <Route
-        path="/reports"
-        element={
-          <MainLayout>
-            <ReportsPage />
-          </MainLayout>
-        }
-      />
+
+      {/* Analytics (Canonical destination) */}
       <Route
         path="/analytics"
         element={
@@ -104,14 +87,20 @@ const AppRoutes: React.FC = () => {
           </MainLayout>
         }
       />
+      <Route path="/reports" element={<Navigate to="/analytics" replace />} />
+
+      {/* Audit Logs (Canonical destination) */}
       <Route
-        path="/audit"
+        path="/audit-logs"
         element={
           <MainLayout>
             <AuditLogsPage />
           </MainLayout>
         }
       />
+      <Route path="/audit" element={<Navigate to="/audit-logs" replace />} />
+
+      {/* Settings */}
       <Route
         path="/settings"
         element={

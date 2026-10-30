@@ -103,13 +103,12 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
   const role = user?.role?.toLowerCase() || 'employee';
 
   const navItems = [
-    { label: 'Overview', icon: LayoutDashboard, path: '/', roles: ['admin', 'manager', 'employee'] },
-    { label: 'Invoices', icon: FileText, path: '/invoices', roles: ['admin', 'manager', 'employee'] },
-    { label: 'Upload Invoice', icon: UploadCloud, path: '/upload', roles: ['admin', 'manager', 'employee'] },
-    { label: 'Approvals', icon: UserCheck, path: '/approvals', roles: ['admin', 'manager'], badge: 'Manager' },
-    { label: 'Verification', icon: ShieldAlert, path: '/verification', roles: ['admin', 'manager', 'employee'] },
+    { label: 'Dashboard', icon: LayoutDashboard, path: '/', roles: ['admin', 'manager', 'employee'] },
+    { label: 'Invoice Management', icon: FileText, path: '/invoices', roles: ['admin', 'manager', 'employee'] },
+    { label: 'Verification & Fraud Analysis', icon: ShieldAlert, path: '/verification', roles: ['admin', 'manager', 'employee'] },
+    { label: 'Approval Center', icon: UserCheck, path: '/approvals', roles: ['admin', 'manager'], badge: 'Manager' },
     { label: 'Analytics', icon: BarChart3, path: '/analytics', roles: ['admin', 'manager', 'employee'] },
-    { label: 'Audit Logs', icon: History, path: '/audit', roles: ['admin', 'manager', 'employee'] },
+    { label: 'Audit Logs', icon: History, path: '/audit-logs', roles: ['admin', 'manager', 'employee'] },
     { label: 'Settings', icon: Settings, path: '/settings', roles: ['admin', 'manager'] },
   ];
 
@@ -119,16 +118,15 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
   // Determine active breadcrumb title
   const getBreadcrumbs = () => {
     const path = location.pathname;
-    if (path === '/') return [{ label: 'Overview', path: '/' }];
-    if (path === '/invoices') return [{ label: 'Invoices', path: '/invoices' }];
-    if (path === '/upload') return [{ label: 'Invoices', path: '/invoices' }, { label: 'Upload & Ingestion', path: '/upload' }];
-    if (path === '/extraction') return [{ label: 'Invoices', path: '/invoices' }, { label: 'Review & Extraction', path: '/extraction' }];
-    if (path === '/validation') return [{ label: 'Verification', path: '/verification' }, { label: 'Business Rules', path: '/validation' }];
-    if (path === '/verification' || path === '/fraud') return [{ label: 'Verification', path: '/verification' }];
-    if (path === '/approvals') return [{ label: 'Approvals', path: '/approvals' }];
+    if (path === '/') return [{ label: 'Dashboard', path: '/' }];
+    if (path === '/invoices') return [{ label: 'Invoice Management', path: '/invoices' }];
+    if (path === '/upload') return [{ label: 'Invoice Management', path: '/invoices' }, { label: 'Upload Invoice', path: '/upload' }];
+    if (path === '/extraction') return [{ label: 'Invoice Management', path: '/invoices' }, { label: 'Extraction & Review', path: '/extraction' }];
+    if (path === '/verification' || path === '/validation' || path === '/fraud') return [{ label: 'Verification & Fraud Analysis', path: '/verification' }];
+    if (path === '/approvals') return [{ label: 'Approval Center', path: '/approvals' }];
     if (path === '/analytics' || path === '/reports') return [{ label: 'Analytics', path: '/analytics' }];
-    if (path === '/audit') return [{ label: 'Audit Logs', path: '/audit' }];
-    if (path === '/settings') return [{ label: 'Settings & Master Data', path: '/settings' }];
+    if (path === '/audit-logs' || path === '/audit') return [{ label: 'Audit Logs', path: '/audit-logs' }];
+    if (path === '/settings') return [{ label: 'Settings', path: '/settings' }];
     return [{ label: path.replace('/', '').toUpperCase(), path }];
   };
 
@@ -194,8 +192,10 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
               const isActive =
                 location.pathname === item.path ||
                 (item.path !== '/' && location.pathname.startsWith(item.path)) ||
-                (item.path === '/verification' && location.pathname === '/fraud') ||
-                (item.path === '/analytics' && location.pathname === '/reports');
+                (item.path === '/invoices' && (location.pathname === '/upload' || location.pathname === '/extraction')) ||
+                (item.path === '/verification' && (location.pathname === '/fraud' || location.pathname === '/validation')) ||
+                (item.path === '/analytics' && location.pathname === '/reports') ||
+                (item.path === '/audit-logs' && location.pathname === '/audit');
 
               return (
                 <Link

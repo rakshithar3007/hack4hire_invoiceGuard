@@ -669,97 +669,32 @@ export const ExtractionPage: React.FC = () => {
             </div>
           </div>
 
-          {/* LOWER SECTION: Verification Evidence Checklist */}
-          <div className="bg-white border border-[#E4E8EF] rounded-[6px] p-4 shadow-[0_1px_2px_rgba(0,0,0,0.03)] space-y-3">
-            <div className="flex items-center justify-between border-b border-[#E4E8EF] pb-3">
+          {/* Transition Card: Single Destination for Verification & Fraud Analysis */}
+          <div className="bg-white border border-[#E4E8EF] rounded-[6px] p-4 shadow-[0_1px_2px_rgba(0,0,0,0.03)] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-[4px] bg-[#E8F1FC] border border-[#2457A6]/20 flex items-center justify-center text-[#2457A6] shrink-0">
+                <ShieldCheck size={20} />
+              </div>
               <div>
-                <h3 className="text-sm font-bold text-[#172033] flex items-center gap-2">
-                  <ShieldCheck size={16} className="text-[#2457A6]" />
-                  <span>Verification Evidence Checklist</span>
-                </h3>
-                <p className="text-xs text-[#697386]">
-                  Rule-based and model-based evidence evaluated against vendor master data and purchase order records.
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-bold text-[#172033]">Verification & Fraud Checks Evaluated</h3>
+                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-[#edf7f2] text-[#21845B] border border-[#21845B]/20">
+                    {validation?.validation_details?.length || 8} Checks Evaluated
+                  </span>
+                </div>
+                <p className="text-xs text-[#697386] mt-0.5">
+                  Statutory GST arithmetic, duplicate invoice hash, and model-based fraud detection evidence are managed in Verification & Fraud Analysis.
                 </p>
               </div>
-              <span className="text-[11px] text-[#697386] font-mono">
-                {validation?.validation_details?.length || 0} checks executed
-              </span>
             </div>
 
-            {/* Checklist items */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
-              {validation?.validation_details?.map((rule) => {
-                const isPass = rule.status === 'PASS';
-                const isWarn = rule.status === 'WARNING';
-                const isFail = rule.status === 'FAIL';
-
-                return (
-                  <div
-                    key={rule.rule_id}
-                    className={`p-3 rounded-[4px] border ${
-                      isPass
-                        ? 'bg-[#edf7f2]/60 border-[#21845B]/30'
-                        : isWarn
-                        ? 'bg-[#fdf6e9] border-[#C58A24]/30'
-                        : 'bg-[#fdf1f1] border-[#C34A4A]/30'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between mb-1.5">
-                      <div className="flex items-center gap-1.5 font-bold text-[#172033]">
-                        {isPass && <CheckCircle2 size={14} className="text-[#21845B]" />}
-                        {isWarn && <AlertTriangle size={14} className="text-[#C58A24]" />}
-                        {isFail && <XCircle size={14} className="text-[#C34A4A]" />}
-                        <span>{rule.name}</span>
-                      </div>
-                      <span className="text-[10px] font-mono uppercase px-1.5 py-0.2 rounded bg-white border border-[#E4E8EF] text-[#697386]">
-                        RULE-BASED
-                      </span>
-                    </div>
-
-                    <p className="text-xs text-[#172033] leading-normal">{rule.reason}</p>
-
-                    {(rule.expected_value || rule.actual_value) && (
-                      <div className="mt-2 pt-2 border-t border-black/5 flex items-center justify-between text-[11px] text-[#697386]">
-                        <span>Expected: <strong>{rule.expected_value || '—'}</strong></span>
-                        <span>Actual: <strong className={isFail ? 'text-[#C34A4A]' : 'text-[#172033]'}>{rule.actual_value || '—'}</strong></span>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-
-              {/* Model-Based Fraud / Anomaly Check Evidence */}
-              {fraud && (
-                <div
-                  className={`p-3 rounded-[4px] border ${
-                    fraud.risk_category === 'LOW'
-                      ? 'bg-[#edf7f2]/60 border-[#21845B]/30'
-                      : 'bg-[#fdf1f1] border-[#C34A4A]/30'
-                  }`}
-                >
-                  <div className="flex items-center justify-between mb-1.5">
-                    <div className="flex items-center gap-1.5 font-bold text-[#172033]">
-                      {fraud.risk_category === 'LOW' ? (
-                        <ShieldCheck size={14} className="text-[#21845B]" />
-                      ) : (
-                        <ShieldAlert size={14} className="text-[#C34A4A]" />
-                      )}
-                      <span>Fraud & Suspicious Content Analysis</span>
-                    </div>
-                    <span className="text-[10px] font-mono uppercase px-1.5 py-0.2 rounded bg-white border border-[#E4E8EF] text-[#697386]">
-                      MODEL-BASED
-                    </span>
-                  </div>
-
-                  <p className="text-xs text-[#172033] leading-normal">{fraud.explanation}</p>
-
-                  <div className="mt-2 pt-2 border-t border-black/5 flex items-center justify-between text-[11px]">
-                    <span className="text-[#697386]">Risk Score: <strong className="font-mono text-[#172033]">{fraud.risk_score}/100</strong></span>
-                    <StatusBadge status={fraud.risk_category} size="sm" />
-                  </div>
-                </div>
-              )}
-            </div>
+            <button
+              onClick={() => navigate(`/verification?invoiceId=${selectedInvoiceId}`)}
+              className="px-4 py-2 bg-[#2457A6] hover:bg-[#1C4585] text-white font-semibold text-xs rounded-[4px] shadow-xs transition flex items-center justify-center gap-1.5 cursor-pointer shrink-0"
+            >
+              <span>View Verification & Fraud Analysis</span>
+              <ArrowRight size={14} />
+            </button>
           </div>
         </>
       )}
