@@ -1,0 +1,24 @@
+{
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "https://invoiceguard-backend.onrender.com/api/:path*"
+    },
+    {
+      "source": "/storage/:path*",
+      "destination": "https://invoiceguard-backend.onrender.com/storage/:path*"
+    },
+    {
+      "source": "/health",
+      "destination": "https://invoiceguard-backend.onrender.com/health"
+    },
+    {
+      "source": "/docs",
+      "destination": "https://invoiceguard-backend.onrender.com/docs"
+    },
+    {
+      "source": "/openapi.json",
+      "destination": "https://invoiceguard-backend.onrender.com/openapi.json"
+    }
+  ]
+}

@@ -57,7 +57,7 @@ async def approve_invoice(
     current_user: User = Depends(require_roles(["manager", "admin"]))
 ):
     # Database transaction with row lock
-    invoice = db.query(Invoice).filter(Invoice.id == invoice_id).with_for_update().first()
+    invoice = db.query(Invoice).filter(Invoice.id == invoice_id).first()
     if not invoice:
         raise HTTPException(status_code=404, detail="Invoice not found")
 
@@ -120,7 +120,7 @@ async def reject_invoice(
             detail="A specific rejection reason is mandatory."
         )
 
-    invoice = db.query(Invoice).filter(Invoice.id == invoice_id).with_for_update().first()
+    invoice = db.query(Invoice).filter(Invoice.id == invoice_id).first()
     if not invoice:
         raise HTTPException(status_code=404, detail="Invoice not found")
 
@@ -163,7 +163,7 @@ async def escalate_invoice(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles(["manager", "admin"]))
 ):
-    invoice = db.query(Invoice).filter(Invoice.id == invoice_id).with_for_update().first()
+    invoice = db.query(Invoice).filter(Invoice.id == invoice_id).first()
     if not invoice:
         raise HTTPException(status_code=404, detail="Invoice not found")
 

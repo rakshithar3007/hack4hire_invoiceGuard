@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_BASE_URL = '/api';
+const API_BASE_URL = (import.meta as any).env?.VITE_API_URL || '/api';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -114,6 +114,13 @@ export const notificationApi = {
 export const n8nApi = {
   simulate: (invoiceId: string) => api.post(`/n8n/simulate-pipeline/${invoiceId}`),
   getFollowupQueue: () => api.get('/n8n/follow-up-queue'),
+};
+
+// Demo Management
+export const demoApi = {
+  getStatus: () => api.get('/demo/status'),
+  seed: () => api.post('/demo/seed'),
+  reset: (params?: { reset_all?: boolean }) => api.post('/demo/reset', null, { params }),
 };
 
 export default api;

@@ -21,6 +21,7 @@ from app.api.audit import router as audit_router
 from app.api.snapshots import router as snapshots_router
 from app.api.notifications import router as notifications_router
 from app.api.n8n import router as n8n_router
+from app.api.demo import router as demo_router
 
 # Initialize database on app load
 init_database()
@@ -61,6 +62,7 @@ app.include_router(audit_router, prefix=api_prefix)
 app.include_router(snapshots_router, prefix=api_prefix)
 app.include_router(notifications_router, prefix=api_prefix)
 app.include_router(n8n_router, prefix=api_prefix)
+app.include_router(demo_router, prefix=api_prefix)
 
 @app.get("/")
 def root():

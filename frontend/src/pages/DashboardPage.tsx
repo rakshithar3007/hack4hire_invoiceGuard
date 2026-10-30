@@ -40,23 +40,52 @@ export const DashboardPage: React.FC = () => {
 
   useEffect(() => {
     const loadDashboardData = async () => {
+      // Fetch each section independently so one failure doesn't block the others
       try {
-        const [statsRes, analyticsRes, recentRes] = await Promise.all([
-          dashboardApi.getStats(),
-          dashboardApi.getAnalytics(),
-          dashboardApi.getRecent()
-        ]);
+        const statsRes = await dashboardApi.getStats();
         setStats(statsRes.data);
+      } catch (err) {
+        console.error('Failed to load dashboard stats', err);
+        // Show zeros instead of '...' when stats fail
+        setStats({
+          total_invoices: 0,
+          processed_invoices: 0,
+          approved_invoices: 0,
+          pending_invoices: 0,
+          rejected_invoices: 0,
+          flagged_invoices: 0,
+          total_spend: 0,
+          avg_confidence: 0,
+        });
+      }
+
+      try {
+        const analyticsRes = await dashboardApi.getAnalytics();
         setAnalytics(analyticsRes.data);
+      } catch (err) {
+        console.error('Failed to load analytics', err);
+        setAnalytics({
+          monthly_trends: [],
+          approval_distribution: { APPROVED: 0, PENDING: 0, REJECTED: 0, ESCALATED: 0 },
+          fraud_risk_distribution: { LOW: 0, MEDIUM: 0, HIGH: 0 },
+          validation_rates: { PASSED: 0, WARNING: 0, FAILED: 0 },
+          supplier_spend: [],
+        });
+      }
+
+      try {
+        const recentRes = await dashboardApi.getRecent();
         setRecentInvoices(recentRes.data);
       } catch (err) {
-        console.error('Failed to load dashboard data', err);
-      } finally {
-        setLoading(false);
+        console.error('Failed to load recent invoices', err);
+        setRecentInvoices([]);
       }
+
+      setLoading(false);
     };
     loadDashboardData();
   }, []);
+
 
   const handleQuickUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || e.target.files.length === 0) return;
@@ -101,7 +130,7 @@ export const DashboardPage: React.FC = () => {
             <span className="text-xs font-semibold uppercase tracking-wider">Total Invoices</span>
             <FileText className="w-4 h-4 text-blue-500" />
           </div>
-          <div className="text-2xl font-bold text-slate-800">{stats?.total_invoices ?? '...'}</div>
+          <div className="text-2xl font-bold text-slate-800">{loading ? '...' : (stats?.total_invoices ?? 0)}</div>
           <p className="text-[11px] text-slate-400 mt-1">All database records</p>
         </div>
 
@@ -110,7 +139,7 @@ export const DashboardPage: React.FC = () => {
             <span className="text-xs font-semibold uppercase tracking-wider">Processed</span>
             <ScanLine className="w-4 h-4 text-teal-500" />
           </div>
-          <div className="text-2xl font-bold text-teal-600">{stats?.processed_invoices ?? '...'}</div>
+          <div className="text-2xl font-bold text-teal-600">{loading ? '...' : (stats?.processed_invoices ?? 0)}</div>
           <p className="text-[11px] text-teal-600/70 mt-1">OCR & AI Extracted</p>
         </div>
 
@@ -119,7 +148,7 @@ export const DashboardPage: React.FC = () => {
             <span className="text-xs font-semibold uppercase tracking-wider">Approved</span>
             <CheckCircle2 className="w-4 h-4 text-emerald-500" />
           </div>
-          <div className="text-2xl font-bold text-emerald-600">{stats?.approved_invoices ?? '...'}</div>
+          <div className="text-2xl font-bold text-emerald-600">{loading ? '...' : (stats?.approved_invoices ?? 0)}</div>
           <p className="text-[11px] text-emerald-600/70 mt-1">Disbursement authorized</p>
         </div>
 
@@ -128,7 +157,7 @@ export const DashboardPage: React.FC = () => {
             <span className="text-xs font-semibold uppercase tracking-wider">Pending</span>
             <Clock className="w-4 h-4 text-amber-500" />
           </div>
-          <div className="text-2xl font-bold text-amber-600">{stats?.pending_invoices ?? '...'}</div>
+          <div className="text-2xl font-bold text-amber-600">{loading ? '...' : (stats?.pending_invoices ?? 0)}</div>
           <p className="text-[11px] text-amber-600/70 mt-1">Manager queue</p>
         </div>
 
@@ -137,7 +166,7 @@ export const DashboardPage: React.FC = () => {
             <span className="text-xs font-semibold uppercase tracking-wider">Rejected</span>
             <XCircle className="w-4 h-4 text-rose-500" />
           </div>
-          <div className="text-2xl font-bold text-rose-600">{stats?.rejected_invoices ?? '...'}</div>
+          <div className="text-2xl font-bold text-rose-600">{loading ? '...' : (stats?.rejected_invoices ?? 0)}</div>
           <p className="text-[11px] text-rose-600/70 mt-1">Declined with reason</p>
         </div>
 
@@ -146,7 +175,7 @@ export const DashboardPage: React.FC = () => {
             <span className="text-xs font-semibold uppercase tracking-wider">Flagged</span>
             <ShieldAlert className="w-4 h-4 text-purple-600" />
           </div>
-          <div className="text-2xl font-bold text-purple-600">{stats?.flagged_invoices ?? '...'}</div>
+          <div className="text-2xl font-bold text-purple-600">{loading ? '...' : (stats?.flagged_invoices ?? 0)}</div>
           <p className="text-[11px] text-purple-600/70 mt-1">High fraud / failed</p>
         </div>
       </div>
@@ -369,7 +398,14 @@ export const DashboardPage: React.FC = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {recentInvoices.map((inv) => (
+              {recentInvoices.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="py-8 text-center text-slate-400">
+                    No invoices found in database. Upload an invoice above to begin processing.
+                  </td>
+                </tr>
+              ) : (
+                recentInvoices.map((inv) => (
                 <tr key={inv.id} className="hover:bg-slate-50/70 transition">
                   <td className="py-3 px-4 font-bold text-slate-800">{inv.id}</td>
                   <td className="py-3 px-4 font-mono">{inv.invoice_number || 'N/A'}</td>
@@ -427,7 +463,7 @@ export const DashboardPage: React.FC = () => {
                     </button>
                   </td>
                 </tr>
-              ))}
+              )))}
             </tbody>
           </table>
         </div>

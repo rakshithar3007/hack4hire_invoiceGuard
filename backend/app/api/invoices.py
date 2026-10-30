@@ -57,9 +57,13 @@ async def upload_invoice(
     # 3. Generate unique invoice ID
     # Format: INV-<sequence>
     count = db.query(Invoice).count()
-    invoice_id = f"INV-{1001 + count}"
+    num = 1001 + count
+    while db.query(Invoice).filter(Invoice.id == f"INV-{num}").first() is not None:
+        num += 1
+    invoice_id = f"INV-{num}"
     
     # Save file to storage
+    os.makedirs(settings.STORAGE_DIR, exist_ok=True)
     safe_filename = f"{invoice_id}_{os.path.basename(file.filename)}"
     file_path = os.path.join(settings.STORAGE_DIR, safe_filename)
     with open(file_path, "wb") as f:

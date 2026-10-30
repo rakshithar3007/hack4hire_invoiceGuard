@@ -6,7 +6,7 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "InvoiceGuard AI"
     API_V1_STR: str = "/api"
     
-    # Database
+    # Database - works on both Windows local dev and Render Linux
     DATABASE_URL: str = "sqlite:///./invoiceguard.db"
     
     # Security
@@ -14,8 +14,8 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 24 hours
     
-    # Storage
-    STORAGE_DIR: str = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../storage/invoices"))
+    # Storage - computed after init
+    STORAGE_DIR: str = ""
     MAX_UPLOAD_SIZE_MB: int = 25
     ALLOWED_EXTENSIONS: list[str] = [".pdf", ".jpg", ".jpeg", ".png"]
     
@@ -35,4 +35,20 @@ class Settings(BaseSettings):
         extra = "allow"
 
 settings = Settings()
+
+# --- Resolve STORAGE_DIR reliably for both local Windows and Render Linux ---
+# Use the backend/ directory (where main.py lives) as the anchor, not __file__
+# because __file__ here is app/core/config.py which is 3 levels deep.
+_backend_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+if not settings.STORAGE_DIR:
+    settings.STORAGE_DIR = os.path.join(_backend_dir, "storage", "invoices")
+
 os.makedirs(settings.STORAGE_DIR, exist_ok=True)
+
+# --- Resolve DATABASE_URL to absolute path for SQLite ---
+# sqlite:///./invoiceguard.db is relative to CWD which may differ on Render.
+# Convert to absolute path anchored at the backend/ directory.
+if settings.DATABASE_URL.startswith("sqlite:///./"):
+    _db_filename = settings.DATABASE_URL.replace("sqlite:///./", "")
+    _db_abs_path = os.path.join(_backend_dir, _db_filename)
+    settings.DATABASE_URL = f"sqlite:///{_db_abs_path}"

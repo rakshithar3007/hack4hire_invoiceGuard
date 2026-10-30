@@ -1,0 +1,17 @@
+{
+  "version": 2,
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "https://invoiceguard-backend.onrender.com/api/:path*"
+    },
+    {
+      "source": "/storage/:path*",
+      "destination": "https://invoiceguard-backend.onrender.com/storage/:path*"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}
