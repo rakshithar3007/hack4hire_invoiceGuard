@@ -45,8 +45,8 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({
   const normStatus = (status || 'PENDING').toUpperCase() as BadgeVariant;
   const label = customLabel || status || 'Pending';
 
-  const sizeClasses = size === 'sm' ? 'px-2 py-0.5 text-[11px] gap-1' : 'px-2.5 py-1 text-xs gap-1.5';
-  const iconSize = size === 'sm' ? 12 : 13;
+  const sizeClasses = size === 'sm' ? 'px-2 py-0.5 text-[10px] gap-1 font-medium' : 'px-2.5 py-0.5 text-[11px] gap-1.5 font-medium';
+  const iconSize = size === 'sm' ? 11 : 12;
 
   let config = {
     bg: 'bg-emerald-50',
@@ -140,7 +140,7 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({
 
   return (
     <span
-      className={`inline-flex items-center rounded-full border transition-all duration-150 ${config.bg} ${config.text} ${config.border} ${sizeClasses} ${className}`}
+      className={`inline-flex items-center rounded-full border whitespace-nowrap shrink-0 transition-all duration-150 ${config.bg} ${config.text} ${config.border} ${sizeClasses} ${className}`}
     >
       <Icon size={iconSize} className={`shrink-0 ${config.pulse ? 'animate-pulse' : ''}`} aria-hidden="true" />
       <span>{label}</span>

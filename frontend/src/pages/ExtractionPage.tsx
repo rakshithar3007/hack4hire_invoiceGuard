@@ -97,47 +97,69 @@ export const ExtractionPage: React.FC = () => {
       ]);
 
       if (invRes.status === 'fulfilled') {
-        setInvoice(invRes.value.data);
+        const payload = invRes.value.data;
+        const invObj = payload.invoice || payload;
+        setInvoice(invObj);
+
+        if (extRes.status === 'fulfilled') {
+          setExtraction(extRes.value.data);
+          const data = extRes.value.data.extracted_data || {};
+          setEditForm({
+            invoice_number: data.invoice_details?.number || '',
+            invoice_date: data.invoice_details?.date || '',
+            due_date: data.invoice_details?.due_date || '',
+            po_number: data.invoice_details?.po_number || '',
+            supplier_name: data.supplier?.name || '',
+            supplier_gstin: data.supplier?.gstin || '',
+            subtotal: data.financials?.subtotal ?? 0,
+            cgst: data.financials?.cgst ?? 0,
+            sgst: data.financials?.sgst ?? 0,
+            igst: data.financials?.igst ?? 0,
+            grand_total: data.financials?.grand_total ?? 0
+          });
+        } else if (payload.extraction) {
+          setExtraction(payload.extraction);
+          const data = payload.extraction.extracted_data || {};
+          setEditForm({
+            invoice_number: data.invoice_details?.number || '',
+            invoice_date: data.invoice_details?.date || '',
+            due_date: data.invoice_details?.due_date || '',
+            po_number: data.invoice_details?.po_number || '',
+            supplier_name: data.supplier?.name || '',
+            supplier_gstin: data.supplier?.gstin || '',
+            subtotal: data.financials?.subtotal ?? 0,
+            cgst: data.financials?.cgst ?? 0,
+            sgst: data.financials?.sgst ?? 0,
+            igst: data.financials?.igst ?? 0,
+            grand_total: data.financials?.grand_total ?? 0
+          });
+        } else {
+          setExtraction(null);
+        }
+
+        if (checkRes.status === 'fulfilled') {
+          setChecker(checkRes.value.data);
+        } else {
+          setChecker(null);
+        }
+
+        if (valRes.status === 'fulfilled') {
+          setValidation(valRes.value.data);
+        } else if (payload.validation) {
+          setValidation(payload.validation);
+        } else {
+          setValidation(null);
+        }
+
+        if (fraudRes.status === 'fulfilled') {
+          setFraud(fraudRes.value.data);
+        } else if (payload.fraud_analysis) {
+          setFraud(payload.fraud_analysis);
+        } else {
+          setFraud(null);
+        }
       } else {
         throw new Error('Invoice record could not be found.');
-      }
-
-      if (extRes.status === 'fulfilled') {
-        setExtraction(extRes.value.data);
-        const data = extRes.value.data.extracted_data || {};
-        setEditForm({
-          invoice_number: data.invoice_details?.number || '',
-          invoice_date: data.invoice_details?.date || '',
-          due_date: data.invoice_details?.due_date || '',
-          po_number: data.invoice_details?.po_number || '',
-          supplier_name: data.supplier?.name || '',
-          supplier_gstin: data.supplier?.gstin || '',
-          subtotal: data.financials?.subtotal ?? 0,
-          cgst: data.financials?.cgst ?? 0,
-          sgst: data.financials?.sgst ?? 0,
-          igst: data.financials?.igst ?? 0,
-          grand_total: data.financials?.grand_total ?? 0
-        });
-      } else {
-        setExtraction(null);
-      }
-
-      if (checkRes.status === 'fulfilled') {
-        setChecker(checkRes.value.data);
-      } else {
-        setChecker(null);
-      }
-
-      if (valRes.status === 'fulfilled') {
-        setValidation(valRes.value.data);
-      } else {
-        setValidation(null);
-      }
-
-      if (fraudRes.status === 'fulfilled') {
-        setFraud(fraudRes.value.data);
-      } else {
-        setFraud(null);
       }
     } catch (err: any) {
       setError(err.message || 'Failed to load invoice extraction.');
@@ -210,51 +232,75 @@ export const ExtractionPage: React.FC = () => {
   return (
     <div className="space-y-4">
       {/* Top Invoice Selector & Status Header */}
-      <div className="bg-white border border-[#E4E8EF] rounded-[6px] p-3.5 flex flex-col md:flex-row md:items-center justify-between gap-3 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
-        <div className="flex items-center gap-3">
-          <label className="text-xs font-semibold text-[#697386] uppercase tracking-wider shrink-0">
-            Selected Invoice:
-          </label>
-          <select
-            value={selectedInvoiceId}
-            onChange={(e) => setSelectedInvoiceId(e.target.value)}
-            className="text-xs font-semibold text-[#172033] bg-[#F7F8FA] border border-[#E4E8EF] rounded-[4px] px-2.5 py-1.5 focus:outline-none focus:border-[#2457A6]"
-          >
-            {invoices.map((inv) => (
-              <option key={inv.id} value={inv.id}>
-                {inv.id} — {inv.invoice_number || 'No Number'} ({inv.supplier_name || 'Vendor'}) — {formatINR(inv.total_amount)}
-              </option>
-            ))}
-          </select>
+      <div className="bg-white border border-slate-200/90 rounded-2xl p-5 shadow-xs relative overflow-hidden space-y-4">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+          <div>
+            <h1 className="text-lg font-bold text-slate-900 font-sans tracking-tight">
+              Extraction & Field Verification Review
+            </h1>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Review and correct extracted tokens side-by-side with original document artifact.
+            </p>
+          </div>
 
-          <button
-            type="button"
-            onClick={() => loadInvoiceData(selectedInvoiceId)}
-            className="p-1.5 rounded-[4px] border border-[#E4E8EF] hover:bg-[#F7F8FA] text-[#697386] hover:text-[#172033] cursor-pointer"
-            title="Refresh current invoice"
-          >
-            <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
-          </button>
+          {/* Verification & Checker Status Badges (Clean, non-wrapping row) */}
+          <div className="flex items-center gap-2 flex-wrap">
+            {checker?.checker_passed ? (
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-semibold whitespace-nowrap shrink-0">
+                <CheckCircle2 size={11} />
+                <span>Checker: VERIFIED</span>
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-200 text-[10px] font-semibold whitespace-nowrap shrink-0">
+                <XCircle size={11} />
+                <span>Checker: UNVERIFIED</span>
+              </span>
+            )}
+
+            <StatusBadge status={invoice?.validation_status} size="sm" customLabel={`Validation: ${invoice?.validation_status || 'PENDING'}`} />
+            <StatusBadge status={invoice?.fraud_status} size="sm" customLabel={`Risk: ${invoice?.fraud_status || 'PENDING'}`} />
+            <StatusBadge status={invoice?.approval_status} size="sm" customLabel={`Approval: ${invoice?.approval_status || 'PENDING'}`} />
+          </div>
         </div>
 
-        {/* Verification & Checker Status Badges */}
-        <div className="flex flex-wrap items-center gap-2">
-          {/* Never claim Verified unless checker passed */}
-          {checker?.checker_passed ? (
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[4px] bg-[#edf7f2] text-[#21845B] border border-[#21845B]/30 text-xs font-bold">
-              <CheckCircle2 size={13} />
-              <span>Checker: VERIFIED</span>
-            </span>
-          ) : (
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[4px] bg-[#fdf1f1] text-[#C34A4A] border border-[#C34A4A]/30 text-xs font-bold">
-              <XCircle size={13} />
-              <span>Checker: UNVERIFIED / DISCREPANCY</span>
-            </span>
-          )}
+        {/* Invoice Selector Bar with generous spacing */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5 flex-1 max-w-xl">
+            <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider shrink-0">
+              Target Invoice:
+            </label>
+            <select
+              value={selectedInvoiceId}
+              onChange={(e) => setSelectedInvoiceId(e.target.value)}
+              className="text-xs font-semibold text-slate-800 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl px-3 py-2 w-full focus:outline-none focus:border-indigo-500 cursor-pointer transition"
+            >
+              {invoices.map((inv) => (
+                <option key={inv.id} value={inv.id}>
+                  {inv.id} — {inv.invoice_number || 'No Number'} ({inv.supplier_name || 'Vendor'}) — {formatINR(inv.total_amount)}
+                </option>
+              ))}
+            </select>
 
-          <StatusBadge status={invoice?.validation_status} customLabel={`Validation: ${invoice?.validation_status || 'PENDING'}`} />
-          <StatusBadge status={invoice?.fraud_status} customLabel={`Risk: ${invoice?.fraud_status || 'PENDING'}`} />
-          <StatusBadge status={invoice?.approval_status} customLabel={`Approval: ${invoice?.approval_status || 'PENDING'}`} />
+            <button
+              type="button"
+              onClick={() => loadInvoiceData(selectedInvoiceId)}
+              className="p-2 rounded-xl border border-slate-200 hover:bg-slate-100 text-slate-500 hover:text-slate-800 cursor-pointer transition shrink-0"
+              title="Refresh current invoice"
+            >
+              <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
+            </button>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => navigate(`/verification?invoiceId=${selectedInvoiceId}`)}
+              className="px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-xl transition flex items-center gap-1.5 cursor-pointer"
+            >
+              <span>View Verification Analysis</span>
+              <ArrowRight size={13} />
+            </button>
+          </div>
         </div>
       </div>
 

@@ -121,26 +121,27 @@ export const FraudDetectionPage: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Header Banner */}
-      <div className="bg-white p-5 rounded-lg border border-[var(--border)] shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs relative overflow-hidden flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="absolute top-0 left-0 right-0 h-[2.5px] bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600" />
         <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-xl font-bold text-[var(--text-primary)]">Verification & Fraud Analysis</h1>
-            <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-[var(--surface-sunken)] border border-[var(--border)] text-[var(--text-secondary)]">
-              Audit Evidence
+          <div className="flex items-center gap-2.5">
+            <h1 className="text-lg font-bold text-slate-900 font-sans tracking-tight">Verification & Fraud Analysis</h1>
+            <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-slate-100 border border-slate-200 text-slate-600 font-mono">
+              Dual-Engine Audit Evidence
             </span>
           </div>
-          <p className="text-xs text-[var(--text-secondary)] mt-1">
-            Separated dual-engine verification: Deterministic rule verification (three-way PO match, arithmetic, master vendor check) and multivariate statistical risk scoring.
+          <p className="text-xs text-slate-500 mt-1 max-w-2xl leading-relaxed">
+            Separated dual-engine verification: Deterministic rule verification (statutory GST math, three-way PO match, duplicate content hash) and multivariate statistical risk scoring.
           </p>
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
-          <div className="flex items-center gap-1.5">
-            <label className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider">Target Invoice:</label>
+          <div className="flex items-center gap-2">
+            <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider shrink-0">Target:</label>
             <select
               value={selectedInvoiceId}
               onChange={(e) => handleSelectInvoice(e.target.value)}
-              className="text-xs font-semibold px-2.5 py-1.5 bg-white border border-[var(--border)] rounded text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent)] cursor-pointer"
+              className="text-xs font-semibold px-3 py-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl text-slate-800 focus:outline-none focus:border-indigo-500 cursor-pointer transition"
             >
               {invoices.map((inv) => (
                 <option key={inv.id} value={inv.id}>
@@ -153,7 +154,7 @@ export const FraudDetectionPage: React.FC = () => {
           <button
             onClick={handleReAssess}
             disabled={reChecking}
-            className="px-3 py-1.5 bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white font-semibold text-xs rounded transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+            className="px-3.5 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold text-xs rounded-xl shadow-xs transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50 hover:-translate-y-0.5 active:translate-y-0"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${reChecking ? 'animate-spin' : ''}`} />
             <span>Re-Assess Rules</span>
@@ -161,7 +162,7 @@ export const FraudDetectionPage: React.FC = () => {
 
           <button
             onClick={() => navigate(`/extraction?invoiceId=${selectedInvoiceId}`)}
-            className="px-3 py-1.5 bg-white hover:bg-[var(--surface-sunken)] text-[var(--text-primary)] border border-[var(--border)] font-semibold text-xs rounded transition"
+            className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-xl transition cursor-pointer"
           >
             Review Split-Pane
           </button>

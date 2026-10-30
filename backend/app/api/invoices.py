@@ -337,17 +337,17 @@ def get_invoice(invoice_id: str, db: Session = Depends(get_db)):
     last_fraud = db.query(FraudAnalysis).filter(FraudAnalysis.invoice_id == invoice_id).order_by(desc(FraudAnalysis.id)).first()
 
     gst_result = None
-    if last_ext and last_ext.raw_extraction:
+    if last_ext and getattr(last_ext, "extracted_data", None):
         try:
             from app.services.gst import gst_calculation_node
-            raw = last_ext.raw_extraction
-            ext_data = raw.get("extracted_data") if isinstance(raw, dict) and "extracted_data" in raw else raw
-            conf = raw.get("confidence_scores", {}) if isinstance(raw, dict) else {}
+            ext_data = last_ext.extracted_data
+            conf = last_ext.confidence_scores if isinstance(last_ext.confidence_scores, dict) else {}
+            overall_conf = conf.get("overall_confidence", 0.95) if isinstance(conf, dict) else 0.95
             gst_state = gst_calculation_node({
                 "invoice_id": invoice.id,
                 "extracted_data": ext_data,
                 "confidence_scores": conf,
-                "overall_confidence": last_ext.overall_confidence
+                "overall_confidence": overall_conf
             })
             gst_result = gst_state.get("gst_result")
         except Exception:

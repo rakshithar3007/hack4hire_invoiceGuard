@@ -36,16 +36,19 @@
     background-color: #F8FAFC;
     color: var(--color-text);
     font-family: var(--font-sans);
+    font-size: 13px;
+    line-height: 1.5;
     margin: 0;
     padding: 0;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    letter-spacing: -0.011em;
+    letter-spacing: -0.01em;
   }
 
   h1, h2, h3, h4, h5, h6 {
     font-family: var(--font-display);
     letter-spacing: -0.02em;
+    line-height: 1.3;
   }
 
   /* Accessible focus rings */
