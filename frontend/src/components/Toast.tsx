@@ -13,6 +13,7 @@ export interface ToastItem {
 interface ToastContextType {
   toasts: ToastItem[];
   addToast: (type: ToastType, title: string, message?: string) => void;
+  showToast: (type: ToastType, title: string, message?: string) => void;
   removeToast: (id: string) => void;
   toast: {
     success: (title: string, message?: string) => void;
@@ -49,7 +50,7 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   };
 
   return (
-    <ToastContext.Provider value={{ toasts, addToast, removeToast, toast }}>
+    <ToastContext.Provider value={{ toasts, addToast, showToast: addToast, removeToast, toast }}>
       {children}
       {/* Toast container */}
       <div

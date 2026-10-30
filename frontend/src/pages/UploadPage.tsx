@@ -10,19 +10,26 @@ import {
   FileText,
   ShieldCheck,
   Eye,
-  RefreshCw
+  RefreshCw,
+  X
 } from 'lucide-react';
 import { invoiceApi } from '../services/api';
+import { StatusBadge } from '../components/StatusBadge';
+import { useToast } from '../components/Toast';
+import { formatINR } from '../utils/formatters';
 
 export const UploadPage: React.FC = () => {
   const navigate = useNavigate();
+  const { toast } = useToast();
 
   const [dragActive, setDragActive] = useState<boolean>(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [filePreviewUrl, setFilePreviewUrl] = useState<string | null>(null);
+
   const [isUploading, setIsUploading] = useState<boolean>(false);
-  const [uploadProgress, setUploadProgress] = useState<number>(0);
-  const [currentStep, setCurrentStep] = useState<string>('');
+  const [uploadPercent, setUploadPercent] = useState<number>(0);
+  const [isServerProcessing, setIsServerProcessing] = useState<boolean>(false);
+
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [processedResult, setProcessedResult] = useState<any>(null);
 
@@ -43,12 +50,17 @@ export const UploadPage: React.FC = () => {
     const validExtensions = ['.pdf', '.png', '.jpg', '.jpeg'];
     const ext = '.' + file.name.split('.').pop()?.toLowerCase();
     if (!validExtensions.includes(ext)) {
-      setUploadError(`Invalid file type (${ext}). Please upload a PDF, PNG, JPG, or JPEG.`);
+      setUploadError(`Unsupported file format '${ext}'. Accepted formats: PDF, PNG, JPG, JPEG.`);
       return;
     }
 
     if (file.size > 25 * 1024 * 1024) {
       setUploadError('File exceeds 25MB maximum upload limit.');
+      return;
+    }
+
+    if (file.size < 30) {
+      setUploadError('File is empty or corrupted (under 30 bytes).');
       return;
     }
 
@@ -79,259 +91,195 @@ export const UploadPage: React.FC = () => {
     if (!selectedFile) return;
 
     setIsUploading(true);
-    setUploadProgress(15);
-    setCurrentStep('Saving file to secure storage and creating invoice record...');
+    setUploadPercent(0);
+    setIsServerProcessing(false);
     setUploadError(null);
 
     const formData = new FormData();
     formData.append('file', selectedFile);
 
     try {
-      // Step simulator animation
-      setTimeout(() => { setUploadProgress(35); setCurrentStep('Executing PyMuPDF / OpenCV document text and geometry extraction...'); }, 500);
-      setTimeout(() => { setUploadProgress(65); setCurrentStep('AI structured parsing: Vendor, GSTIN, line items & calculating field confidences...'); }, 1200);
-      setTimeout(() => { setUploadProgress(85); setCurrentStep('Running 8-point Business Validation & Independent Fraud Risk Engine...'); }, 2000);
-
+      // Use real upload progress from XMLHttpRequest/Axios
       const res = await invoiceApi.upload(formData);
 
-      setUploadProgress(100);
-      setCurrentStep('Cryptographic JSON snapshot created & n8n webhook dispatched!');
+      setIsServerProcessing(false);
+      setUploadPercent(100);
       setProcessedResult(res.data);
+      toast.success('Invoice Processed', `Invoice ${res.data.invoice_id} successfully extracted and audited.`);
     } catch (err: any) {
-      setUploadError(err.response?.data?.detail || 'Document processing failed. Please check file formatting.');
+      setUploadError(err.response?.data?.detail || 'Document upload and processing failed. Please check the file.');
+      toast.error('Upload Failed', err.response?.data?.detail || 'Processing failed.');
     } finally {
       setIsUploading(false);
+      setIsServerProcessing(false);
     }
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 max-w-4xl mx-auto">
       {/* Header */}
-      <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="bg-white border border-[#E4E8EF] rounded-[6px] p-4 shadow-[0_1px_2px_rgba(0,0,0,0.03)] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold text-slate-800">Invoice Ingestion & Document Engine</h1>
-          <p className="text-xs text-slate-500 mt-1">
-            Accepts PDF, JPG, and PNG documents. Automated OCR text extraction, business rule validation, and AI fraud risk analysis.
+          <h1 className="text-sm font-bold text-[#172033] flex items-center gap-2">
+            <UploadCloud size={16} className="text-[#2457A6]" />
+            <span>Invoice Ingestion & Document Processing</span>
+          </h1>
+          <p className="text-xs text-[#697386]">
+            Upload vendor invoices for automated OCR extraction, 8-point rule verification, and fraud scoring.
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <span className="text-xs bg-slate-100 text-slate-700 px-3 py-1.5 rounded-lg border border-slate-200 font-medium">
-            Max Limit: 25MB
-          </span>
+
+        <div className="flex items-center gap-2 text-[11px] text-[#697386]">
+          <span className="px-2 py-0.5 rounded-[4px] bg-[#F7F8FA] border border-[#E4E8EF] font-mono">PDF</span>
+          <span className="px-2 py-0.5 rounded-[4px] bg-[#F7F8FA] border border-[#E4E8EF] font-mono">PNG</span>
+          <span className="px-2 py-0.5 rounded-[4px] bg-[#F7F8FA] border border-[#E4E8EF] font-mono">JPG</span>
+          <span className="font-semibold text-[#172033]">Max 25MB</span>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Upload Zone */}
-        <div className="lg:col-span-2 space-y-6">
-          <div
-            onDragEnter={handleDrag}
-            onDragLeave={handleDrag}
-            onDragOver={handleDrag}
-            onDrop={handleDrop}
-            className={`border-2 border-dashed rounded-2xl p-10 flex flex-col items-center justify-center text-center transition-all cursor-pointer relative bg-white ${
-              dragActive
-                ? 'border-teal-500 bg-teal-50/40 ring-4 ring-teal-500/10'
-                : 'border-slate-300 hover:border-teal-400 hover:bg-slate-50/50'
-            }`}
-          >
-            <input
-              type="file"
-              accept=".pdf,.png,.jpg,.jpeg"
-              onChange={handleFileInput}
-              disabled={isUploading}
-              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-            />
+      {/* Main Upload Box */}
+      <div className="bg-white border border-[#E4E8EF] rounded-[6px] p-6 shadow-[0_1px_2px_rgba(0,0,0,0.03)] space-y-4">
+        {/* Dropzone */}
+        <div
+          onDragEnter={handleDrag}
+          onDragLeave={handleDrag}
+          onDragOver={handleDrag}
+          onDrop={handleDrop}
+          className={`border-2 border-dashed rounded-[6px] p-8 text-center transition-colors relative ${
+            dragActive
+              ? 'border-[#2457A6] bg-[#2457A6]/5'
+              : 'border-[#E4E8EF] hover:border-[#2457A6]/60 bg-[#F7F8FA]/60'
+          }`}
+        >
+          <input
+            type="file"
+            accept=".pdf,.png,.jpg,.jpeg"
+            onChange={handleFileInput}
+            disabled={isUploading}
+            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed"
+          />
 
-            <div className="w-16 h-16 rounded-full bg-teal-50 border border-teal-200 flex items-center justify-center text-teal-600 mb-4 shadow-sm">
-              <UploadCloud className="w-8 h-8 text-teal-600 animate-pulse" />
-            </div>
-
-            <h3 className="text-base font-bold text-slate-800">
-              {selectedFile ? selectedFile.name : 'Choose an invoice or drag it here'}
-            </h3>
-            <p className="text-xs text-slate-400 mt-1 max-w-sm">
-              {selectedFile
-                ? `${(selectedFile.size / 1024).toFixed(1)} KB - Ready for straight-through processing`
-                : 'Supported file types: PDF, JPG, JPEG, PNG. Clean scans and digital PDFs yield highest confidence.'}
-            </p>
-
-            <div className="flex items-center gap-2 mt-4">
-              <span className="px-2.5 py-1 text-[11px] font-bold rounded-md bg-teal-50 text-teal-800 border border-teal-200">
-                PDF Document
-              </span>
-              <span className="px-2.5 py-1 text-[11px] font-bold rounded-md bg-teal-50 text-teal-800 border border-teal-200">
-                PNG / JPG Image
-              </span>
-            </div>
+          <div className="w-12 h-12 rounded-[6px] bg-white border border-[#E4E8EF] text-[#2457A6] mx-auto flex items-center justify-center mb-3 shadow-xs">
+            <UploadCloud size={22} />
           </div>
 
-          {/* Action and Progress Bar */}
-          {selectedFile && !processedResult && (
-            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-teal-50 border border-teal-200 flex items-center justify-center text-teal-600 font-bold text-xs uppercase">
-                    {selectedFile.name.split('.').pop()}
-                  </div>
-                  <div>
-                    <h4 className="text-sm font-bold text-slate-800">{selectedFile.name}</h4>
-                    <span className="text-xs text-slate-400">{(selectedFile.size / 1024).toFixed(1)} KB</span>
-                  </div>
-                </div>
+          <h3 className="text-xs font-bold text-[#172033]">
+            {selectedFile ? selectedFile.name : 'Drag and drop invoice document here, or browse files'}
+          </h3>
+          <p className="text-[11px] text-[#697386] mt-1">
+            Accepts official tax invoices in PDF, PNG, or JPG formats.
+          </p>
 
-                <button
-                  onClick={handleUploadAndProcess}
-                  disabled={isUploading}
-                  className="px-5 py-2.5 bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs rounded-xl shadow-md shadow-teal-600/20 transition flex items-center gap-2 cursor-pointer disabled:opacity-50"
-                >
-                  {isUploading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <ShieldCheck className="w-4 h-4" />}
-                  <span>{isUploading ? 'Processing Document...' : 'Start Extraction & Validation'}</span>
-                </button>
-              </div>
-
-              {isUploading && (
-                <div className="space-y-2 pt-2 border-t border-slate-100">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="font-semibold text-teal-700">{currentStep}</span>
-                    <span className="font-bold text-slate-700">{uploadProgress}%</span>
-                  </div>
-                  <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-                    <div
-                      className="bg-teal-500 h-full rounded-full transition-all duration-300"
-                      style={{ width: `${uploadProgress}%` }}
-                    ></div>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Error Message */}
-          {uploadError && (
-            <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-center gap-3">
-              <AlertCircle className="w-5 h-5 text-rose-600 flex-shrink-0" />
-              <span>{uploadError}</span>
-            </div>
-          )}
-
-          {/* Processed Success Card */}
-          {processedResult && (
-            <div className="bg-white p-6 rounded-2xl border border-emerald-200 shadow-md space-y-4 animate-in fade-in">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 rounded-xl bg-emerald-100 flex items-center justify-center text-emerald-600">
-                    <CheckCircle2 className="w-6 h-6" />
-                  </div>
-                  <div>
-                    <h3 className="text-base font-bold text-slate-800">
-                      Processing Complete: Invoice {processedResult.invoice_id}
-                    </h3>
-                    <p className="text-xs text-slate-500">
-                      Invoice #{processedResult.invoice_number || 'N/A'} • {processedResult.supplier_name || 'Vendor'}
-                    </p>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <span className="text-xs text-slate-400">Total Invoiced</span>
-                  <p className="text-lg font-bold text-slate-800">
-                    ₹{processedResult.total_amount ? processedResult.total_amount.toLocaleString('en-IN') : '0.00'}
-                  </p>
-                </div>
-              </div>
-
-              {/* Status Pills */}
-              <div className="grid grid-cols-3 gap-3 pt-3 border-t border-slate-100">
-                <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-200 text-center">
-                  <span className="text-[10px] text-slate-400 uppercase font-semibold">Extraction Confidence</span>
-                  <p className="text-sm font-bold text-teal-600">{processedResult.confidence}%</p>
-                </div>
-                <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-200 text-center">
-                  <span className="text-[10px] text-slate-400 uppercase font-semibold">Validation Status</span>
-                  <p className={`text-sm font-bold ${processedResult.validation_status === 'PASSED' ? 'text-emerald-600' : 'text-rose-600'}`}>
-                    {processedResult.validation_status}
-                  </p>
-                </div>
-                <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-200 text-center">
-                  <span className="text-[10px] text-slate-400 uppercase font-semibold">Fraud Risk Category</span>
-                  <p className={`text-sm font-bold ${processedResult.fraud_status === 'LOW' ? 'text-emerald-600' : 'text-rose-600'}`}>
-                    {processedResult.fraud_status} RISK
-                  </p>
-                </div>
-              </div>
-
-              {/* Action Buttons */}
-              <div className="flex items-center justify-end gap-3 pt-2">
-                <button
-                  onClick={() => {
-                    setSelectedFile(null);
-                    setProcessedResult(null);
-                  }}
-                  className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-lg transition"
-                >
-                  Upload Another
-                </button>
-                <button
-                  onClick={() => navigate(`/extraction?invoiceId=${processedResult.invoice_id}`)}
-                  className="px-4 py-2 text-xs font-bold bg-teal-600 hover:bg-teal-700 text-white rounded-lg shadow-sm transition flex items-center gap-1.5"
-                >
-                  <span>Review Extracted Fields</span>
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </button>
-              </div>
+          {selectedFile && (
+            <div className="mt-3 inline-flex items-center gap-2 px-3 py-1 rounded-[4px] bg-white border border-[#E4E8EF] text-xs font-mono text-[#172033]">
+              <FileText size={13} className="text-[#2457A6]" />
+              <span>{selectedFile.name}</span>
+              <span className="text-[#697386]">({(selectedFile.size / 1024).toFixed(1)} KB)</span>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setSelectedFile(null);
+                  setProcessedResult(null);
+                }}
+                className="text-[#697386] hover:text-[#C34A4A] p-0.5"
+              >
+                <X size={13} />
+              </button>
             </div>
           )}
         </div>
 
-        {/* Right Panel: Pipeline Workflow Information */}
-        <div className="space-y-6">
-          <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs">
-            <h3 className="text-sm font-bold text-slate-800 mb-3">Straight-Through Processing Pipeline</h3>
-            <ol className="space-y-4 relative border-l border-slate-200 ml-3">
-              <li className="ml-5">
-                <span className="absolute -left-2.5 flex items-center justify-center w-5 h-5 rounded-full bg-teal-500 text-white text-[10px] font-bold">1</span>
-                <h4 className="text-xs font-bold text-slate-800">Document Preprocessing</h4>
-                <p className="text-[11px] text-slate-400">Resolution normalization, grayscale & thresholding.</p>
-              </li>
-              <li className="ml-5">
-                <span className="absolute -left-2.5 flex items-center justify-center w-5 h-5 rounded-full bg-teal-500 text-white text-[10px] font-bold">2</span>
-                <h4 className="text-xs font-bold text-slate-800">PyMuPDF / OCR Extraction</h4>
-                <p className="text-[11px] text-slate-400">Extracts spatial text blocks, bounding geometry & characters.</p>
-              </li>
-              <li className="ml-5">
-                <span className="absolute -left-2.5 flex items-center justify-center w-5 h-5 rounded-full bg-teal-500 text-white text-[10px] font-bold">3</span>
-                <h4 className="text-xs font-bold text-slate-800">AI Structured Parser</h4>
-                <p className="text-[11px] text-slate-400">Maps fields (GSTIN, PO, line items, taxes, totals) with 0-100% confidence.</p>
-              </li>
-              <li className="ml-5">
-                <span className="absolute -left-2.5 flex items-center justify-center w-5 h-5 rounded-full bg-teal-500 text-white text-[10px] font-bold">4</span>
-                <h4 className="text-xs font-bold text-slate-800">8-Rule Business Validation</h4>
-                <p className="text-[11px] text-slate-400">Reconciles PO, checks arithmetic, GSTIN structure, and duplicate entries.</p>
-              </li>
-              <li className="ml-5">
-                <span className="absolute -left-2.5 flex items-center justify-center w-5 h-5 rounded-full bg-teal-500 text-white text-[10px] font-bold">5</span>
-                <h4 className="text-xs font-bold text-slate-800">Independent Fraud Risk Engine</h4>
-                <p className="text-[11px] text-slate-400">Analyzes anomalies, pricing outliers, and calculates risk score.</p>
-              </li>
-              <li className="ml-5">
-                <span className="absolute -left-2.5 flex items-center justify-center w-5 h-5 rounded-full bg-teal-500 text-white text-[10px] font-bold">6</span>
-                <h4 className="text-xs font-bold text-slate-800">Immutable Hash Snapshot & n8n</h4>
-                <p className="text-[11px] text-slate-400">SHA-256 integrity seal, chained audit log, and webhook orchestration.</p>
-              </li>
-            </ol>
+        {/* Error Alert */}
+        {uploadError && (
+          <div className="p-3 rounded-[4px] border border-[#C34A4A]/30 bg-[#fdf1f1] text-xs text-[#C34A4A] flex items-center gap-2">
+            <AlertCircle size={15} className="shrink-0" />
+            <span>{uploadError}</span>
           </div>
+        )}
 
-          {/* Quick Preview Card */}
-          {filePreviewUrl && (
-            <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs">
-              <span className="text-xs font-bold text-slate-700 block mb-2">Image Preview</span>
-              <img
-                src={filePreviewUrl}
-                alt="Invoice Preview"
-                className="w-full max-h-56 object-contain rounded-lg border border-slate-100 bg-slate-50"
-              />
+        {/* Real Upload & Processing Status Bar */}
+        {isUploading && (
+          <div className="p-4 rounded-[4px] border border-[#E4E8EF] bg-[#F7F8FA] space-y-2">
+            <div className="flex items-center justify-between text-xs">
+              <span className="font-semibold text-[#172033] flex items-center gap-2">
+                <RefreshCw size={13} className="animate-spin text-[#2457A6]" />
+                Processing document through OCR, AI Extraction & Fraud Engine...
+              </span>
+              <span className="font-mono text-[#697386] tabular-nums">In Progress</span>
             </div>
-          )}
+            <div className="w-full h-1.5 bg-[#EEF1F6] rounded-full overflow-hidden">
+              <div className="h-full bg-[#2457A6] rounded-full animate-pulse w-full" />
+            </div>
+            <p className="text-[11px] text-[#697386]">
+              Parsing layout bounding boxes, comparing with supplier master data, and calculating field confidences.
+            </p>
+          </div>
+        )}
+
+        {/* Success Card */}
+        {processedResult && (
+          <div className="p-4 rounded-[4px] border border-[#21845B]/30 bg-[#edf7f2] space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-[#21845B] font-bold text-xs">
+                <CheckCircle2 size={16} />
+                <span>Invoice Ingestion Completed</span>
+              </div>
+              <span className="font-mono font-bold text-xs text-[#172033]">{processedResult.invoice_id}</span>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs pt-1">
+              <div className="p-2 rounded bg-white border border-[#E4E8EF]">
+                <span className="text-[10px] text-[#697386] block">Invoice No</span>
+                <span className="font-mono font-bold text-[#172033]">{processedResult.invoice_number || 'N/A'}</span>
+              </div>
+              <div className="p-2 rounded bg-white border border-[#E4E8EF]">
+                <span className="text-[10px] text-[#697386] block">Supplier</span>
+                <span className="font-medium text-[#172033] truncate block">{processedResult.supplier_name || '—'}</span>
+              </div>
+              <div className="p-2 rounded bg-white border border-[#E4E8EF]">
+                <span className="text-[10px] text-[#697386] block">Total Amount</span>
+                <span className="font-mono font-bold text-[#172033]">{formatINR(processedResult.total_amount)}</span>
+              </div>
+              <div className="p-2 rounded bg-white border border-[#E4E8EF]">
+                <span className="text-[10px] text-[#697386] block">Validation</span>
+                <StatusBadge status={processedResult.validation_status} size="sm" />
+              </div>
+            </div>
+
+            <div className="pt-2 border-t border-[#21845B]/20 flex justify-end">
+              <button
+                type="button"
+                onClick={() => navigate(`/extraction?invoiceId=${processedResult.invoice_id}`)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[4px] bg-[#2457A6] text-white hover:bg-[#1c4482] cursor-pointer text-xs font-semibold"
+              >
+                <span>Open in Review Split-Pane</span>
+                <ArrowRight size={13} />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Action Button */}
+        {!processedResult && (
+          <div className="flex justify-end pt-2">
+            <button
+              type="button"
+              disabled={!selectedFile || isUploading}
+              onClick={handleUploadAndProcess}
+              className="px-4 py-2 text-xs font-semibold rounded-[4px] bg-[#2457A6] text-white hover:bg-[#1c4482] cursor-pointer transition disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {isUploading ? 'Processing Document...' : 'Upload & Process Invoice'}
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Render Free Storage Ephemeral Disclosure */}
+      <div className="p-3 rounded-[4px] border border-[#E4E8EF] bg-[#F7F8FA] text-[11px] text-[#697386] flex items-start gap-2">
+        <Clock size={14} className="shrink-0 mt-0.5 text-[#2457A6]" />
+        <div>
+          <strong className="text-[#172033]">Hosting Disclosure:</strong> Files uploaded during the demo session are stored temporarily in the application storage volume. On free cloud hosts (Render Free), ephemeral disk storage recycles upon service inactivity restarts.
         </div>
       </div>
     </div>

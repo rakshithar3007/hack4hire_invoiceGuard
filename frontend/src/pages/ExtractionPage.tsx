@@ -1,40 +1,71 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import {
+  FileText,
   ScanText,
   CheckCircle2,
-  AlertCircle,
+  AlertTriangle,
+  XCircle,
   RefreshCw,
-  Edit3,
+  Edit2,
   Save,
-  Check,
-  ArrowRight,
-  FileText,
+  X,
+  Download,
+  ZoomIn,
+  ZoomOut,
+  RotateCcw,
+  ShieldCheck,
   ShieldAlert,
   HelpCircle,
-  Eye,
-  Sliders
+  ArrowRight,
+  ExternalLink,
+  ChevronRight,
+  FileSearch,
+  Sliders,
+  DollarSign
 } from 'lucide-react';
-import { extractionApi, invoiceApi } from '../services/api';
-import { Invoice, ExtractionResult } from '../types';
+import { invoiceApi, extractionApi, validationApi, fraudApi } from '../services/api';
+import { Invoice, ExtractionResult, ValidationResult, FraudAnalysis } from '../types';
+import { StatusBadge } from '../components/StatusBadge';
+import { ConfidenceChip } from '../components/ConfidenceChip';
+import { Skeleton } from '../components/Skeleton';
+import { EmptyState } from '../components/EmptyState';
+import { ErrorState } from '../components/ErrorState';
+import { useToast } from '../components/Toast';
+import { formatINR, formatDate } from '../utils/formatters';
 
 export const ExtractionPage: React.FC = () => {
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
+  const { toast } = useToast();
 
   const [invoices, setInvoices] = useState<Invoice[]>([]);
-  const [selectedInvoiceId, setSelectedInvoiceId] = useState<string>(searchParams.get('invoiceId') || 'INV-1001');
+  const [selectedInvoiceId, setSelectedInvoiceId] = useState<string>(
+    searchParams.get('invoiceId') || 'INV-1001'
+  );
+  const [invoice, setInvoice] = useState<Invoice | null>(null);
   const [extraction, setExtraction] = useState<ExtractionResult | null>(null);
-  const [checkerStatus, setCheckerStatus] = useState<any>(null);
+  const [checker, setChecker] = useState<any>(null);
+  const [validation, setValidation] = useState<ValidationResult | null>(null);
+  const [fraud, setFraud] = useState<FraudAnalysis | null>(null);
+
   const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Split-pane preview controls
+  const [zoomLevel, setZoomLevel] = useState<number>(100);
+
+  // Field Edit Mode
   const [isEditing, setIsEditing] = useState<boolean>(false);
+  const [isVerifyingPending, setIsVerifyingPending] = useState<boolean>(false);
   const [editForm, setEditForm] = useState<any>({});
   const [saveLoading, setSaveLoading] = useState<boolean>(false);
-  const [reExtractLoading, setReExtractLoading] = useState<boolean>(false);
-  const [selectedStrategy, setSelectedStrategy] = useState<string>('heuristic_ai');
-  const [saveSuccessMsg, setSaveSuccessMsg] = useState<string | null>(null);
 
-  // Load invoice list
+  // Re-extraction strategy
+  const [reExtractLoading, setReExtractLoading] = useState<boolean>(false);
+  const [strategy, setStrategy] = useState<string>('heuristic_ai');
+
+  // Load all invoices for invoice switcher
   useEffect(() => {
     const fetchInvoices = async () => {
       try {
@@ -43,43 +74,73 @@ export const ExtractionPage: React.FC = () => {
         if (res.data.length > 0 && !searchParams.get('invoiceId')) {
           setSelectedInvoiceId(res.data[0].id);
         }
-      } catch (e) {
-        console.error(e);
+      } catch (err) {
+        console.error('Failed to load invoices list', err);
       }
     };
     fetchInvoices();
-  }, []);
+  }, [searchParams]);
 
-  // Load extraction and checker for selected invoice
-  const loadInvoiceExtraction = async (id: string) => {
+  // Load all data for selected invoice
+  const loadInvoiceData = async (invId: string) => {
     setLoading(true);
-    setSaveSuccessMsg(null);
-    try {
-      const [extRes, checkerRes] = await Promise.all([
-        extractionApi.get(id),
-        extractionApi.getChecker(id)
-      ]);
-      setExtraction(extRes.data);
-      setCheckerStatus(checkerRes.data);
+    setError(null);
+    setIsEditing(false);
 
-      const d = extRes.data.extracted_data;
-      setEditForm({
-        supplier_name: d.supplier?.name || '',
-        supplier_gstin: d.supplier?.gstin || '',
-        supplier_address: d.supplier?.address || '',
-        supplier_contact: d.supplier?.contact || '',
-        invoice_number: d.invoice_details?.number || '',
-        invoice_date: d.invoice_details?.date || '',
-        due_date: d.invoice_details?.due_date || '',
-        po_number: d.invoice_details?.po_number || '',
-        subtotal: d.financials?.subtotal || 0,
-        cgst: d.financials?.cgst || 0,
-        sgst: d.financials?.sgst || 0,
-        igst: d.financials?.igst || 0,
-        grand_total: d.financials?.grand_total || 0,
-      });
-    } catch (e) {
-      console.error(e);
+    try {
+      const [invRes, extRes, checkRes, valRes, fraudRes] = await Promise.allSettled([
+        invoiceApi.getById(invId),
+        extractionApi.get(invId),
+        extractionApi.getChecker(invId),
+        validationApi.get(invId),
+        fraudApi.get(invId)
+      ]);
+
+      if (invRes.status === 'fulfilled') {
+        setInvoice(invRes.value.data);
+      } else {
+        throw new Error('Invoice record could not be found.');
+      }
+
+      if (extRes.status === 'fulfilled') {
+        setExtraction(extRes.value.data);
+        const data = extRes.value.data.extracted_data || {};
+        setEditForm({
+          invoice_number: data.invoice_details?.number || '',
+          invoice_date: data.invoice_details?.date || '',
+          due_date: data.invoice_details?.due_date || '',
+          po_number: data.invoice_details?.po_number || '',
+          supplier_name: data.supplier?.name || '',
+          supplier_gstin: data.supplier?.gstin || '',
+          subtotal: data.financials?.subtotal ?? 0,
+          cgst: data.financials?.cgst ?? 0,
+          sgst: data.financials?.sgst ?? 0,
+          igst: data.financials?.igst ?? 0,
+          grand_total: data.financials?.grand_total ?? 0
+        });
+      } else {
+        setExtraction(null);
+      }
+
+      if (checkRes.status === 'fulfilled') {
+        setChecker(checkRes.value.data);
+      } else {
+        setChecker(null);
+      }
+
+      if (valRes.status === 'fulfilled') {
+        setValidation(valRes.value.data);
+      } else {
+        setValidation(null);
+      }
+
+      if (fraudRes.status === 'fulfilled') {
+        setFraud(fraudRes.value.data);
+      } else {
+        setFraud(null);
+      }
+    } catch (err: any) {
+      setError(err.message || 'Failed to load invoice extraction.');
     } finally {
       setLoading(false);
     }
@@ -87,453 +148,620 @@ export const ExtractionPage: React.FC = () => {
 
   useEffect(() => {
     if (selectedInvoiceId) {
-      loadInvoiceExtraction(selectedInvoiceId);
+      loadInvoiceData(selectedInvoiceId);
+      setSearchParams({ invoiceId: selectedInvoiceId });
     }
   }, [selectedInvoiceId]);
 
-  const handleSaveCorrection = async () => {
+  // Handle Manual Field Edit Save
+  const handleSaveEdit = async () => {
     setSaveLoading(true);
-    setSaveSuccessMsg(null);
+    setIsVerifyingPending(true);
+
     try {
-      await extractionApi.update(selectedInvoiceId, editForm);
+      const res = await extractionApi.update(selectedInvoiceId, {
+        invoice_number: editForm.invoice_number,
+        invoice_date: editForm.invoice_date,
+        due_date: editForm.due_date,
+        po_number: editForm.po_number,
+        supplier_name: editForm.supplier_name,
+        supplier_gstin: editForm.supplier_gstin,
+        subtotal: parseFloat(editForm.subtotal) || 0,
+        cgst: parseFloat(editForm.cgst) || 0,
+        sgst: parseFloat(editForm.sgst) || 0,
+        igst: parseFloat(editForm.igst) || 0,
+        grand_total: parseFloat(editForm.grand_total) || 0
+      });
+
+      toast.success('Fields Updated', 'Re-validation and fraud analysis completed.');
       setIsEditing(false);
-      setSaveSuccessMsg('Invoice values manually updated and revalidated.');
-      loadInvoiceExtraction(selectedInvoiceId);
-    } catch (err) {
-      console.error('Failed to save correction', err);
+      // Reload full state
+      await loadInvoiceData(selectedInvoiceId);
+    } catch (err: any) {
+      toast.error('Update Failed', err.response?.data?.detail || 'Failed to update extraction.');
     } finally {
       setSaveLoading(false);
+      setIsVerifyingPending(false);
     }
   };
 
+  // Handle Re-extraction
   const handleReExtract = async () => {
     setReExtractLoading(true);
     try {
-      await extractionApi.reExtract(selectedInvoiceId, { strategy: selectedStrategy });
-      await loadInvoiceExtraction(selectedInvoiceId);
-    } catch (err) {
-      console.error('Re-extraction failed', err);
+      const res = await extractionApi.reExtract(selectedInvoiceId, { strategy });
+      toast.success('Re-extraction Succeeded', `Attempt ${res.data.attempt_number} evaluated by independent checker.`);
+      await loadInvoiceData(selectedInvoiceId);
+    } catch (err: any) {
+      toast.error('Re-extraction Failed', err.response?.data?.detail || 'Execution failed.');
     } finally {
       setReExtractLoading(false);
     }
   };
 
-  const getConfidenceBadge = (score: number = 0) => {
-    if (score >= 80) {
-      return (
-        <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200 flex items-center gap-1">
-          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-          {score.toFixed(0)}% High
-        </span>
-      );
-    } else if (score >= 50) {
-      return (
-        <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 border border-amber-200 flex items-center gap-1">
-          <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
-          {score.toFixed(0)}% Medium
-        </span>
-      );
-    } else {
-      return (
-        <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-rose-100 text-rose-800 border border-rose-200 flex items-center gap-1">
-          <span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
-          {score.toFixed(0)}% Low
-        </span>
-      );
-    }
-  };
+  const extData: any = extraction?.extracted_data || {};
+  const confScores = extraction?.confidence_scores || {};
+  const items = extData.items || [];
 
-  const d = extraction?.extracted_data;
-  const c = extraction?.confidence_scores || {};
+  // File URL
+  const fileUrl = invoice?.file_name ? `/storage/invoices/${invoice.file_name}` : null;
+  const isPdf = invoice?.file_name?.toLowerCase().endsWith('.pdf');
 
   return (
-    <div className="space-y-6">
-      {/* Top Banner & Invoice Selector */}
-      <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-xl font-bold text-slate-800">Intelligent Extraction & Checker</h1>
-            <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded bg-teal-500 text-slate-950">
-              OCR + AI Engine
-            </span>
-          </div>
-          <p className="text-xs text-slate-500 mt-1">
-            Spatial token parsing, field-level confidence ratings, manual corrections, and independent checker review.
-          </p>
-        </div>
-
-        {/* Invoice Selector Dropdown */}
+    <div className="space-y-4">
+      {/* Top Invoice Selector & Status Header */}
+      <div className="bg-white border border-[#E4E8EF] rounded-[6px] p-3.5 flex flex-col md:flex-row md:items-center justify-between gap-3 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
         <div className="flex items-center gap-3">
-          <label className="text-xs font-bold text-slate-600">Select Invoice:</label>
+          <label className="text-xs font-semibold text-[#697386] uppercase tracking-wider shrink-0">
+            Selected Invoice:
+          </label>
           <select
             value={selectedInvoiceId}
             onChange={(e) => setSelectedInvoiceId(e.target.value)}
-            className="text-xs font-semibold px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-500/20"
+            className="text-xs font-semibold text-[#172033] bg-[#F7F8FA] border border-[#E4E8EF] rounded-[4px] px-2.5 py-1.5 focus:outline-none focus:border-[#2457A6]"
           >
             {invoices.map((inv) => (
               <option key={inv.id} value={inv.id}>
-                {inv.id} - {inv.invoice_number || 'No Num'} ({inv.supplier_name || 'Vendor'})
+                {inv.id} — {inv.invoice_number || 'No Number'} ({inv.supplier_name || 'Vendor'}) — {formatINR(inv.total_amount)}
               </option>
             ))}
           </select>
+
+          <button
+            type="button"
+            onClick={() => loadInvoiceData(selectedInvoiceId)}
+            className="p-1.5 rounded-[4px] border border-[#E4E8EF] hover:bg-[#F7F8FA] text-[#697386] hover:text-[#172033] cursor-pointer"
+            title="Refresh current invoice"
+          >
+            <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
+          </button>
+        </div>
+
+        {/* Verification & Checker Status Badges */}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Never claim Verified unless checker passed */}
+          {checker?.checker_passed ? (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[4px] bg-[#edf7f2] text-[#21845B] border border-[#21845B]/30 text-xs font-bold">
+              <CheckCircle2 size={13} />
+              <span>Checker: VERIFIED</span>
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[4px] bg-[#fdf1f1] text-[#C34A4A] border border-[#C34A4A]/30 text-xs font-bold">
+              <XCircle size={13} />
+              <span>Checker: UNVERIFIED / DISCREPANCY</span>
+            </span>
+          )}
+
+          <StatusBadge status={invoice?.validation_status} customLabel={`Validation: ${invoice?.validation_status || 'PENDING'}`} />
+          <StatusBadge status={invoice?.fraud_status} customLabel={`Risk: ${invoice?.fraud_status || 'PENDING'}`} />
+          <StatusBadge status={invoice?.approval_status} customLabel={`Approval: ${invoice?.approval_status || 'PENDING'}`} />
         </div>
       </div>
 
-      {saveSuccessMsg && (
-        <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-800 text-xs font-medium flex items-center gap-2 animate-in fade-in">
-          <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-          <span>{saveSuccessMsg}</span>
-        </div>
-      )}
-
       {loading ? (
-        <div className="p-16 bg-white rounded-2xl border border-slate-200 text-center text-xs text-slate-400">
-          <RefreshCw className="w-6 h-6 animate-spin mx-auto text-teal-600 mb-2" />
-          Loading extracted invoice data & confidence models...
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <Skeleton className="h-[600px] w-full" />
+          <Skeleton className="h-[600px] w-full" />
         </div>
+      ) : error ? (
+        <ErrorState title="Invoice Load Error" message={error} onRetry={() => loadInvoiceData(selectedInvoiceId)} />
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          {/* Left 5 Cols: Visual Invoice Document with Teal Bounding Box Overlays (Matching Frame 03) */}
-          <div className="lg:col-span-5 bg-white rounded-2xl border border-slate-200 p-6 shadow-xs flex flex-col justify-between">
-            <div>
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
-                  <FileText className="w-4 h-4 text-teal-600" />
-                  Document Visual Layout
-                </span>
-                <span className="text-[11px] font-semibold text-teal-700 bg-teal-50 px-2 py-0.5 rounded-full border border-teal-200">
-                  Interactive Bounding Boxes
-                </span>
-              </div>
-              <p className="text-[11px] text-slate-400 mb-4">
-                Teal outlines denote spatial OCR regions detected by PyMuPDF and AI anchor detectors.
-              </p>
-
-              {/* Simulated Visual Sheet matching frame 03 */}
-              <div className="relative w-full aspect-[1/1.3] bg-slate-50 rounded-xl border border-slate-200 p-5 font-mono text-[10px] text-slate-600 shadow-inner overflow-hidden select-none">
-                {/* Visual Bounding Box 1: Supplier Box */}
-                <div className="absolute top-4 left-4 right-1/2 p-2 border-2 border-teal-500 bg-teal-500/10 rounded">
-                  <span className="text-[8px] font-bold text-teal-700 uppercase block">Supplier Bounding Box</span>
-                  <div className="font-bold text-slate-800">{d?.supplier?.name || 'ABC Technologies'}</div>
-                  <div className="text-[8px] text-slate-500">GSTIN: {d?.supplier?.gstin || '29ABCDE1234F1Z5'}</div>
+        <>
+          {/* SPLIT PANE: Left (PDF/Image Preview) | Right (Structured Data & Confidences) */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+            {/* LEFT PANE: Document Preview (5 Cols on large screens) */}
+            <div className="lg:col-span-5 bg-white border border-[#E4E8EF] rounded-[6px] flex flex-col h-[680px] shadow-[0_1px_2px_rgba(0,0,0,0.03)] overflow-hidden">
+              {/* Document Toolbar */}
+              <div className="h-11 bg-[#F7F8FA] border-b border-[#E4E8EF] px-3 flex items-center justify-between text-xs text-[#697386] shrink-0">
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <FileText size={14} className="text-[#2457A6] shrink-0" />
+                  <span className="font-semibold text-[#172033] truncate">
+                    {invoice?.file_name || 'Document Preview'}
+                  </span>
                 </div>
 
-                {/* Visual Bounding Box 2: Invoice Meta Box */}
-                <div className="absolute top-4 right-4 left-[55%] p-2 border-2 border-teal-500 bg-teal-500/10 rounded text-right">
-                  <span className="text-[8px] font-bold text-teal-700 uppercase block">Invoice Meta Box</span>
-                  <div className="font-bold text-slate-800">#{d?.invoice_details?.number || 'ABC-2026-001'}</div>
-                  <div className="text-[8px] text-slate-500">Date: {d?.invoice_details?.date || '2026-10-30'}</div>
-                  <div className="text-[8px] text-slate-500">PO: {d?.invoice_details?.po_number || 'PO-2026-8801'}</div>
-                </div>
-
-                {/* Visual Bounding Box 3: Table Box */}
-                <div className="absolute top-[35%] left-4 right-4 bottom-[28%] p-2 border-2 border-teal-500 bg-teal-500/10 rounded flex flex-col justify-between">
-                  <span className="text-[8px] font-bold text-teal-700 uppercase">Line Items Table Box</span>
-                  <div className="space-y-1.5 my-auto">
-                    {d?.items?.slice(0, 3).map((it: any, i: number) => (
-                      <div key={i} className="flex justify-between border-b border-teal-200/40 pb-1 text-[9px]">
-                        <span className="truncate max-w-[150px]">{it.description}</span>
-                        <span>₹{it.total?.toLocaleString('en-IN')}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Visual Bounding Box 4: Financials Box */}
-                <div className="absolute bottom-4 right-4 left-1/3 p-2 border-2 border-teal-500 bg-teal-500/10 rounded text-right">
-                  <span className="text-[8px] font-bold text-teal-700 uppercase block">Grand Total Box</span>
-                  <div className="text-xs font-extrabold text-teal-800">
-                    ₹{d?.financials?.grand_total?.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                  </div>
-                  <div className="text-[8px] text-slate-500">Subtotal: ₹{d?.financials?.subtotal?.toLocaleString('en-IN')}</div>
-                </div>
-              </div>
-            </div>
-
-            {/* OCR raw text toggle snippet */}
-            <div className="mt-4 pt-3 border-t border-slate-100">
-              <span className="text-[11px] font-bold text-slate-600 block mb-1">OCR Raw Text Buffer</span>
-              <div className="max-h-20 overflow-y-auto p-2 bg-slate-100 rounded text-[10px] text-slate-500 font-mono">
-                {extraction?.ocr_text || 'No raw text stored.'}
-              </div>
-            </div>
-          </div>
-
-          {/* Right 7 Cols: Editable Form + Independent Checker Decision Diamond (Frame 09 & 12) */}
-          <div className="lg:col-span-7 space-y-6">
-            {/* Independent Checker Status Card matching reference video frames 09 & 12 */}
-            <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-lg bg-teal-50 flex items-center justify-center text-teal-600 font-bold">
-                    <Sliders className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-bold text-slate-800">Independent Checker Verification</h3>
-                    <p className="text-[11px] text-slate-400">Decision engine comparing OCR, database vendor master & PO</p>
-                  </div>
-                </div>
-
-                {/* Overall Confidence Circle matching reference video frame 12 */}
-                <div className="flex items-center gap-3">
-                  <div className="relative w-14 h-14 rounded-full border-4 border-teal-500/20 flex items-center justify-center">
-                    <div
-                      className="absolute inset-0 rounded-full border-4 border-teal-500"
-                      style={{ clipPath: `inset(0 0 ${100 - (d?.overall_confidence || 95)}% 0)` }}
-                    ></div>
-                    <span className="text-xs font-extrabold text-slate-800">
-                      {d?.overall_confidence?.toFixed(0) || 95}%
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Decision Diamond Status */}
-              <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div>
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="text-xs font-bold text-slate-700">CHECKER PASSED?:</span>
-                    <span
-                      className={`text-xs font-extrabold px-2.5 py-0.5 rounded-full ${
-                        checkerStatus?.checker_passed
-                          ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-                          : 'bg-rose-100 text-rose-800 border border-rose-300'
-                      }`}
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setZoomLevel((z) => Math.max(50, z - 15))}
+                    className="p-1 rounded-[4px] hover:bg-[#EEF1F6] text-[#172033] cursor-pointer"
+                    title="Zoom Out"
+                  >
+                    <ZoomOut size={13} />
+                  </button>
+                  <span className="text-[11px] font-mono tabular-nums px-1">{zoomLevel}%</span>
+                  <button
+                    type="button"
+                    onClick={() => setZoomLevel((z) => Math.min(200, z + 15))}
+                    className="p-1 rounded-[4px] hover:bg-[#EEF1F6] text-[#172033] cursor-pointer"
+                    title="Zoom In"
+                  >
+                    <ZoomIn size={13} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setZoomLevel(100)}
+                    className="p-1 rounded-[4px] hover:bg-[#EEF1F6] text-[#172033] cursor-pointer"
+                    title="Reset Zoom"
+                  >
+                    <RotateCcw size={12} />
+                  </button>
+                  {fileUrl && (
+                    <a
+                      href={fileUrl}
+                      download={invoice?.file_name || 'invoice.pdf'}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="p-1 rounded-[4px] hover:bg-[#EEF1F6] text-[#2457A6] cursor-pointer ml-1"
+                      title="Download Original File"
                     >
-                      {checkerStatus?.checker_passed ? 'PASS ✓' : 'FAIL ✕'}
-                    </span>
-                    <span className="text-[11px] text-slate-400">
-                      (Attempt {checkerStatus?.attempt_number || 1} of {checkerStatus?.max_attempts || 3})
-                    </span>
-                  </div>
-                  <p className="text-xs text-slate-500">
-                    {checkerStatus?.recommended_strategy || 'Standard verification complete.'}
-                  </p>
-                </div>
-
-                {/* Re-extraction Trigger */}
-                <div className="flex items-center gap-2">
-                  {checkerStatus?.can_retry && (
-                    <button
-                      onClick={handleReExtract}
-                      disabled={reExtractLoading}
-                      className="px-3 py-1.5 bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs rounded-lg shadow-sm transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-                    >
-                      <RefreshCw className={`w-3.5 h-3.5 ${reExtractLoading ? 'animate-spin' : ''}`} />
-                      <span>{reExtractLoading ? 'Running...' : 'Run Re-Extraction'}</span>
-                    </button>
+                      <Download size={13} />
+                    </a>
                   )}
-                  <button
-                    onClick={() => navigate(`/validation?invoiceId=${selectedInvoiceId}`)}
-                    className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-lg transition flex items-center gap-1"
-                  >
-                    <span>Validate</span>
-                    <ArrowRight className="w-3.5 h-3.5" />
-                  </button>
                 </div>
               </div>
-            </div>
 
-            {/* Editable Fields Form */}
-            <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-5">
-              <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-                <div>
-                  <h3 className="text-sm font-bold text-slate-800">Structured Extracted Fields</h3>
-                  <p className="text-xs text-slate-400">All fields scored with confidence and directly editable</p>
-                </div>
-                {!isEditing ? (
-                  <button
-                    onClick={() => setIsEditing(true)}
-                    className="px-3 py-1.5 text-xs font-bold text-teal-700 bg-teal-50 hover:bg-teal-100 rounded-lg transition flex items-center gap-1.5"
-                  >
-                    <Edit3 className="w-3.5 h-3.5" />
-                    <span>Edit Fields Manually</span>
-                  </button>
+              {/* Document Viewport */}
+              <div className="flex-1 bg-[#F7F8FA] overflow-auto p-3 flex items-center justify-center">
+                {fileUrl ? (
+                  isPdf ? (
+                    <object
+                      data={fileUrl}
+                      type="application/pdf"
+                      style={{ transform: `scale(${zoomLevel / 100})`, transformOrigin: 'top center' }}
+                      className="w-full h-full border border-[#E4E8EF] bg-white rounded-[4px] transition-transform"
+                    >
+                      <div className="p-6 text-center text-xs text-[#697386]">
+                        <p className="mb-2">Unable to display PDF preview directly.</p>
+                        <a
+                          href={fileUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-[#2457A6] underline font-semibold"
+                        >
+                          Open document in new tab
+                        </a>
+                      </div>
+                    </object>
+                  ) : (
+                    <div className="overflow-auto max-h-full">
+                      <img
+                        src={fileUrl}
+                        alt="Invoice Document"
+                        style={{ transform: `scale(${zoomLevel / 100})`, transformOrigin: 'center' }}
+                        className="max-w-full rounded-[4px] border border-[#E4E8EF] shadow-xs transition-transform"
+                      />
+                    </div>
+                  )
                 ) : (
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => setIsEditing(false)}
-                      className="px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-lg transition"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      onClick={handleSaveCorrection}
-                      disabled={saveLoading}
-                      className="px-4 py-1.5 text-xs font-bold bg-teal-600 hover:bg-teal-700 text-white rounded-lg shadow-sm transition flex items-center gap-1.5"
-                    >
-                      <Save className="w-3.5 h-3.5" />
-                      <span>{saveLoading ? 'Saving...' : 'Save & Revalidate'}</span>
-                    </button>
-                  </div>
+                  <EmptyState title="No document file found" description="The file reference is not available." />
                 )}
               </div>
+            </div>
 
-              {/* Form Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-                {/* Supplier Name */}
-                <div className="space-y-1">
-                  <div className="flex justify-between items-center">
-                    <span className="font-semibold text-slate-600">Supplier Name</span>
-                    {getConfidenceBadge(c.supplier_name)}
-                  </div>
-                  {isEditing ? (
-                    <input
-                      type="text"
-                      value={editForm.supplier_name}
-                      onChange={(e) => setEditForm({ ...editForm, supplier_name: e.target.value })}
-                      className="w-full p-2 bg-slate-50 border border-slate-300 rounded-lg text-slate-800 font-medium"
-                    />
-                  ) : (
-                    <div className="p-2 bg-slate-50/80 rounded-lg border border-slate-200/80 font-bold text-slate-800">
-                      {d?.supplier?.name || 'N/A'}
-                    </div>
+            {/* RIGHT PANE: Structured Fields, Line Items & Edit Form (7 Cols on large screens) */}
+            <div className="lg:col-span-7 bg-white border border-[#E4E8EF] rounded-[6px] flex flex-col h-[680px] shadow-[0_1px_2px_rgba(0,0,0,0.03)] overflow-hidden">
+              {/* Header with Edit Toggle */}
+              <div className="h-11 bg-[#F7F8FA] border-b border-[#E4E8EF] px-4 flex items-center justify-between text-xs shrink-0">
+                <div className="flex items-center gap-2">
+                  <ScanText size={15} className="text-[#2457A6]" />
+                  <span className="font-bold text-[#172033]">Extracted Fields & Confidences</span>
+                  {isVerifyingPending && (
+                    <span className="text-[11px] font-semibold text-[#C58A24] bg-[#fdf6e9] px-2 py-0.5 rounded border border-[#C58A24]/30 animate-pulse">
+                      Verification pending...
+                    </span>
                   )}
                 </div>
 
-                {/* GSTIN */}
-                <div className="space-y-1">
-                  <div className="flex justify-between items-center">
-                    <span className="font-semibold text-slate-600">Supplier GSTIN</span>
-                    {getConfidenceBadge(c.supplier_gstin)}
-                  </div>
+                <div className="flex items-center gap-2">
                   {isEditing ? (
-                    <input
-                      type="text"
-                      value={editForm.supplier_gstin}
-                      onChange={(e) => setEditForm({ ...editForm, supplier_gstin: e.target.value })}
-                      className="w-full p-2 bg-slate-50 border border-slate-300 rounded-lg text-slate-800 font-mono"
-                    />
+                    <>
+                      <button
+                        type="button"
+                        disabled={saveLoading}
+                        onClick={() => setIsEditing(false)}
+                        className="px-2.5 py-1 text-xs rounded-[4px] border border-[#E4E8EF] bg-white text-[#697386] hover:bg-[#F7F8FA] cursor-pointer"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        disabled={saveLoading}
+                        onClick={handleSaveEdit}
+                        className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-[4px] bg-[#2457A6] text-white hover:bg-[#1c4482] cursor-pointer"
+                      >
+                        <Save size={12} />
+                        <span>{saveLoading ? 'Re-validating...' : 'Save & Re-verify'}</span>
+                      </button>
+                    </>
                   ) : (
-                    <div className="p-2 bg-slate-50/80 rounded-lg border border-slate-200/80 font-mono font-bold text-slate-800">
-                      {d?.supplier?.gstin || 'N/A'}
-                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setIsEditing(true)}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-[4px] border border-[#E4E8EF] bg-white text-[#172033] hover:bg-[#F7F8FA] cursor-pointer"
+                    >
+                      <Edit2 size={12} className="text-[#2457A6]" />
+                      <span>Edit Fields</span>
+                    </button>
                   )}
                 </div>
+              </div>
 
-                {/* Invoice Number */}
-                <div className="space-y-1">
-                  <div className="flex justify-between items-center">
-                    <span className="font-semibold text-slate-600">Invoice Number</span>
-                    {getConfidenceBadge(c.invoice_number)}
-                  </div>
-                  {isEditing ? (
-                    <input
-                      type="text"
-                      value={editForm.invoice_number}
-                      onChange={(e) => setEditForm({ ...editForm, invoice_number: e.target.value })}
-                      className="w-full p-2 bg-slate-50 border border-slate-300 rounded-lg text-slate-800 font-mono"
-                    />
-                  ) : (
-                    <div className="p-2 bg-slate-50/80 rounded-lg border border-slate-200/80 font-mono font-bold text-slate-800">
-                      {d?.invoice_details?.number || 'N/A'}
+              {/* Scrollable Form Body */}
+              <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                {/* Independent Checker Alert Box */}
+                {checker && !checker.checker_passed && (
+                  <div className="p-3 rounded-[4px] border border-[#C34A4A]/30 bg-[#fdf1f1] text-xs">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="font-bold text-[#C34A4A] flex items-center gap-1.5">
+                        <AlertTriangle size={14} />
+                        Independent Checker Flagged Discrepancies
+                      </span>
+                      <span className="text-[10px] font-mono text-[#697386]">
+                        Attempt {checker.attempt_number} of {checker.max_attempts}
+                      </span>
                     </div>
-                  )}
+                    <ul className="list-disc list-inside text-[#172033] space-y-0.5 pl-1 my-2 font-medium">
+                      {checker.discrepancies?.map((disc: string, dIdx: number) => (
+                        <li key={`disc-${dIdx}`}>{disc}</li>
+                      ))}
+                    </ul>
+                    {checker.can_retry && (
+                      <div className="pt-2 border-t border-[#C34A4A]/20 flex flex-wrap items-center justify-between gap-2">
+                        <span className="text-[11px] text-[#697386]">
+                          Recommendation: <strong>{checker.recommended_strategy}</strong>
+                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <select
+                            value={strategy}
+                            onChange={(e) => setStrategy(e.target.value)}
+                            className="text-[11px] p-1 rounded border border-[#E4E8EF] bg-white text-[#172033]"
+                          >
+                            <option value="heuristic_ai">Heuristic AI Parser</option>
+                            <option value="ocr_enhancement">Adaptive OCR Enhancement</option>
+                            <option value="alternative_patterns">Alternative RegEx Patterns</option>
+                          </select>
+                          <button
+                            type="button"
+                            disabled={reExtractLoading}
+                            onClick={handleReExtract}
+                            className="px-2.5 py-1 text-xs font-semibold rounded-[4px] bg-[#C34A4A] text-white hover:bg-[#a63e3e] cursor-pointer"
+                          >
+                            {reExtractLoading ? 'Re-running...' : 'Run Re-extraction'}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Primary Metadata Grid */}
+                <div className="grid grid-cols-2 gap-3 text-xs">
+                  {/* Invoice Number */}
+                  <div className="p-2.5 rounded-[4px] border border-[#E4E8EF] bg-[#F7F8FA]">
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-[11px] font-semibold text-[#697386] uppercase tracking-wider">
+                        Invoice Number
+                      </label>
+                      <ConfidenceChip score={confScores.invoice_number} />
+                    </div>
+                    {isEditing ? (
+                      <input
+                        type="text"
+                        value={editForm.invoice_number}
+                        onChange={(e) => setEditForm({ ...editForm, invoice_number: e.target.value })}
+                        className="w-full p-1.5 text-xs font-mono font-bold bg-white border border-[#E4E8EF] rounded-[4px] text-[#172033]"
+                      />
+                    ) : (
+                      <div className="font-mono font-bold text-[#172033] text-sm truncate">
+                        {extData.invoice_details?.number || '—'}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* PO Number Reference */}
+                  <div className="p-2.5 rounded-[4px] border border-[#E4E8EF] bg-[#F7F8FA]">
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-[11px] font-semibold text-[#697386] uppercase tracking-wider">
+                        PO Reference
+                      </label>
+                      <span className="text-[10px] font-mono text-[#697386]">RULE-BASED</span>
+                    </div>
+                    {isEditing ? (
+                      <input
+                        type="text"
+                        value={editForm.po_number}
+                        onChange={(e) => setEditForm({ ...editForm, po_number: e.target.value })}
+                        className="w-full p-1.5 text-xs font-mono font-bold bg-white border border-[#E4E8EF] rounded-[4px] text-[#172033]"
+                      />
+                    ) : (
+                      <div className="font-mono font-bold text-[#172033] text-sm truncate">
+                        {extData.invoice_details?.po_number || '—'}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Supplier Name */}
+                  <div className="p-2.5 rounded-[4px] border border-[#E4E8EF] bg-[#F7F8FA]">
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-[11px] font-semibold text-[#697386] uppercase tracking-wider">
+                        Supplier Name
+                      </label>
+                      <ConfidenceChip score={confScores.supplier_name} />
+                    </div>
+                    {isEditing ? (
+                      <input
+                        type="text"
+                        value={editForm.supplier_name}
+                        onChange={(e) => setEditForm({ ...editForm, supplier_name: e.target.value })}
+                        className="w-full p-1.5 text-xs font-medium bg-white border border-[#E4E8EF] rounded-[4px] text-[#172033]"
+                      />
+                    ) : (
+                      <div className="font-bold text-[#172033] truncate">
+                        {extData.supplier?.name || '—'}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Supplier GSTIN */}
+                  <div className="p-2.5 rounded-[4px] border border-[#E4E8EF] bg-[#F7F8FA]">
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-[11px] font-semibold text-[#697386] uppercase tracking-wider">
+                        Supplier GSTIN
+                      </label>
+                      <ConfidenceChip score={confScores.supplier_gstin} />
+                    </div>
+                    {isEditing ? (
+                      <input
+                        type="text"
+                        value={editForm.supplier_gstin}
+                        onChange={(e) => setEditForm({ ...editForm, supplier_gstin: e.target.value })}
+                        className="w-full p-1.5 text-xs font-mono font-bold bg-white border border-[#E4E8EF] rounded-[4px] text-[#172033]"
+                      />
+                    ) : (
+                      <div className="font-mono font-bold text-[#172033] truncate">
+                        {extData.supplier?.gstin || '—'}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Invoice Date */}
+                  <div className="p-2.5 rounded-[4px] border border-[#E4E8EF] bg-[#F7F8FA]">
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-[11px] font-semibold text-[#697386] uppercase tracking-wider">
+                        Invoice Date
+                      </label>
+                      <span className="text-[10px] font-mono text-[#697386]">RULE-BASED</span>
+                    </div>
+                    {isEditing ? (
+                      <input
+                        type="date"
+                        value={editForm.invoice_date}
+                        onChange={(e) => setEditForm({ ...editForm, invoice_date: e.target.value })}
+                        className="w-full p-1.5 text-xs bg-white border border-[#E4E8EF] rounded-[4px] text-[#172033]"
+                      />
+                    ) : (
+                      <div className="font-medium text-[#172033]">
+                        {formatDate(extData.invoice_details?.date)}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Due Date */}
+                  <div className="p-2.5 rounded-[4px] border border-[#E4E8EF] bg-[#F7F8FA]">
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-[11px] font-semibold text-[#697386] uppercase tracking-wider">
+                        Due Date
+                      </label>
+                      <span className="text-[10px] font-mono text-[#697386]">RULE-BASED</span>
+                    </div>
+                    {isEditing ? (
+                      <input
+                        type="date"
+                        value={editForm.due_date}
+                        onChange={(e) => setEditForm({ ...editForm, due_date: e.target.value })}
+                        className="w-full p-1.5 text-xs bg-white border border-[#E4E8EF] rounded-[4px] text-[#172033]"
+                      />
+                    ) : (
+                      <div className="font-medium text-[#172033]">
+                        {formatDate(extData.invoice_details?.due_date)}
+                      </div>
+                    )}
+                  </div>
                 </div>
 
-                {/* PO Number */}
-                <div className="space-y-1">
-                  <div className="flex justify-between items-center">
-                    <span className="font-semibold text-slate-600">PO Number</span>
-                    {getConfidenceBadge(c.po_number)}
+                {/* Line Items Table */}
+                <div className="border border-[#E4E8EF] rounded-[4px] overflow-hidden">
+                  <div className="bg-[#F7F8FA] px-3 py-2 border-b border-[#E4E8EF] flex items-center justify-between">
+                    <span className="text-xs font-bold text-[#172033]">Line Items</span>
+                    <span className="text-[11px] text-[#697386]">{items.length} item(s)</span>
                   </div>
-                  {isEditing ? (
-                    <input
-                      type="text"
-                      value={editForm.po_number}
-                      onChange={(e) => setEditForm({ ...editForm, po_number: e.target.value })}
-                      className="w-full p-2 bg-slate-50 border border-slate-300 rounded-lg text-slate-800 font-mono"
-                    />
-                  ) : (
-                    <div className="p-2 bg-slate-50/80 rounded-lg border border-slate-200/80 font-mono font-bold text-slate-800">
-                      {d?.invoice_details?.po_number || 'N/A'}
-                    </div>
-                  )}
+                  <table className="w-full text-xs text-left">
+                    <thead className="bg-[#F7F8FA] text-[#697386] uppercase text-[10px] font-semibold border-b border-[#E4E8EF]">
+                      <tr>
+                        <th className="py-2 px-3">Description</th>
+                        <th className="py-2 px-3 text-right">Qty</th>
+                        <th className="py-2 px-3 text-right">Unit Price</th>
+                        <th className="py-2 px-3 text-right">Tax</th>
+                        <th className="py-2 px-3 text-right">Total</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#E4E8EF] text-[#172033]">
+                      {items.length === 0 ? (
+                        <tr>
+                          <td colSpan={5} className="py-4 text-center text-[#697386]">
+                            No line items itemized.
+                          </td>
+                        </tr>
+                      ) : (
+                        items.map((it: any, iIdx: number) => (
+                          <tr key={`item-${iIdx}`}>
+                            <td className="py-2 px-3 font-medium">{it.description || 'Line Item'}</td>
+                            <td className="py-2 px-3 text-right font-mono tabular-nums">{it.quantity || 1}</td>
+                            <td className="py-2 px-3 text-right font-mono tabular-nums">{formatINR(it.unit_price)}</td>
+                            <td className="py-2 px-3 text-right font-mono tabular-nums">{formatINR(it.tax)}</td>
+                            <td className="py-2 px-3 text-right font-mono font-bold tabular-nums">{formatINR(it.total)}</td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
                 </div>
 
-                {/* Invoice Date */}
-                <div className="space-y-1">
-                  <div className="flex justify-between items-center">
-                    <span className="font-semibold text-slate-600">Invoice Date</span>
-                    {getConfidenceBadge(c.invoice_date)}
+                {/* Financial Totals Breakdown */}
+                <div className="border border-[#E4E8EF] rounded-[4px] p-3 bg-[#F7F8FA] space-y-1.5 text-xs">
+                  <div className="flex justify-between text-[#697386]">
+                    <span>Subtotal</span>
+                    <span className="font-mono tabular-nums">{formatINR(extData.financials?.subtotal)}</span>
                   </div>
-                  {isEditing ? (
-                    <input
-                      type="date"
-                      value={editForm.invoice_date}
-                      onChange={(e) => setEditForm({ ...editForm, invoice_date: e.target.value })}
-                      className="w-full p-2 bg-slate-50 border border-slate-300 rounded-lg text-slate-800"
-                    />
-                  ) : (
-                    <div className="p-2 bg-slate-50/80 rounded-lg border border-slate-200/80 text-slate-800 font-medium">
-                      {d?.invoice_details?.date || 'N/A'}
+                  <div className="flex justify-between text-[#697386]">
+                    <span>CGST + SGST (Statutory)</span>
+                    <span className="font-mono tabular-nums">
+                      {formatINR((extData.financials?.cgst || 0) + (extData.financials?.sgst || 0))}
+                    </span>
+                  </div>
+                  {extData.financials?.igst > 0 && (
+                    <div className="flex justify-between text-[#697386]">
+                      <span>IGST (Interstate)</span>
+                      <span className="font-mono tabular-nums">{formatINR(extData.financials?.igst)}</span>
                     </div>
                   )}
-                </div>
-
-                {/* Due Date */}
-                <div className="space-y-1">
-                  <div className="flex justify-between items-center">
-                    <span className="font-semibold text-slate-600">Due Date</span>
-                    {getConfidenceBadge(c.due_date)}
-                  </div>
-                  {isEditing ? (
-                    <input
-                      type="date"
-                      value={editForm.due_date}
-                      onChange={(e) => setEditForm({ ...editForm, due_date: e.target.value })}
-                      className="w-full p-2 bg-slate-50 border border-slate-300 rounded-lg text-slate-800"
-                    />
-                  ) : (
-                    <div className="p-2 bg-slate-50/80 rounded-lg border border-slate-200/80 text-slate-800 font-medium">
-                      {d?.invoice_details?.due_date || 'N/A'}
+                  <div className="pt-2 border-t border-[#E4E8EF] flex items-center justify-between text-sm font-bold text-[#172033]">
+                    <div className="flex items-center gap-2">
+                      <span>Total Amount</span>
+                      <ConfidenceChip score={confScores.grand_total} />
                     </div>
-                  )}
-                </div>
-
-                {/* Subtotal */}
-                <div className="space-y-1">
-                  <div className="flex justify-between items-center">
-                    <span className="font-semibold text-slate-600">Subtotal (INR)</span>
-                    {getConfidenceBadge(c.subtotal)}
+                    {isEditing ? (
+                      <input
+                        type="number"
+                        value={editForm.grand_total}
+                        onChange={(e) => setEditForm({ ...editForm, grand_total: e.target.value })}
+                        className="w-32 p-1 text-xs font-mono font-bold bg-white border border-[#E4E8EF] rounded-[4px] text-right"
+                      />
+                    ) : (
+                      <span className="font-mono tabular-nums text-base text-[#2457A6]">
+                        {formatINR(extData.financials?.grand_total || invoice?.total_amount)}
+                      </span>
+                    )}
                   </div>
-                  {isEditing ? (
-                    <input
-                      type="number"
-                      value={editForm.subtotal}
-                      onChange={(e) => setEditForm({ ...editForm, subtotal: parseFloat(e.target.value) || 0 })}
-                      className="w-full p-2 bg-slate-50 border border-slate-300 rounded-lg text-slate-800"
-                    />
-                  ) : (
-                    <div className="p-2 bg-slate-50/80 rounded-lg border border-slate-200/80 font-bold text-slate-800">
-                      ₹{d?.financials?.subtotal?.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                    </div>
-                  )}
-                </div>
-
-                {/* Grand Total */}
-                <div className="space-y-1">
-                  <div className="flex justify-between items-center">
-                    <span className="font-bold text-slate-900">Grand Total (INR)</span>
-                    {getConfidenceBadge(c.grand_total)}
-                  </div>
-                  {isEditing ? (
-                    <input
-                      type="number"
-                      value={editForm.grand_total}
-                      onChange={(e) => setEditForm({ ...editForm, grand_total: parseFloat(e.target.value) || 0 })}
-                      className="w-full p-2 bg-slate-50 border border-teal-500 rounded-lg text-slate-900 font-bold"
-                    />
-                  ) : (
-                    <div className="p-2 bg-teal-50/50 rounded-lg border border-teal-200 font-extrabold text-teal-800 text-sm">
-                      ₹{d?.financials?.grand_total?.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                    </div>
-                  )}
                 </div>
               </div>
             </div>
           </div>
-        </div>
+
+          {/* LOWER SECTION: Verification Evidence Checklist */}
+          <div className="bg-white border border-[#E4E8EF] rounded-[6px] p-4 shadow-[0_1px_2px_rgba(0,0,0,0.03)] space-y-3">
+            <div className="flex items-center justify-between border-b border-[#E4E8EF] pb-3">
+              <div>
+                <h3 className="text-sm font-bold text-[#172033] flex items-center gap-2">
+                  <ShieldCheck size={16} className="text-[#2457A6]" />
+                  <span>Verification Evidence Checklist</span>
+                </h3>
+                <p className="text-xs text-[#697386]">
+                  Rule-based and model-based evidence evaluated against vendor master data and purchase order records.
+                </p>
+              </div>
+              <span className="text-[11px] text-[#697386] font-mono">
+                {validation?.validation_details?.length || 0} checks executed
+              </span>
+            </div>
+
+            {/* Checklist items */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+              {validation?.validation_details?.map((rule) => {
+                const isPass = rule.status === 'PASS';
+                const isWarn = rule.status === 'WARNING';
+                const isFail = rule.status === 'FAIL';
+
+                return (
+                  <div
+                    key={rule.rule_id}
+                    className={`p-3 rounded-[4px] border ${
+                      isPass
+                        ? 'bg-[#edf7f2]/60 border-[#21845B]/30'
+                        : isWarn
+                        ? 'bg-[#fdf6e9] border-[#C58A24]/30'
+                        : 'bg-[#fdf1f1] border-[#C34A4A]/30'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-1.5">
+                      <div className="flex items-center gap-1.5 font-bold text-[#172033]">
+                        {isPass && <CheckCircle2 size={14} className="text-[#21845B]" />}
+                        {isWarn && <AlertTriangle size={14} className="text-[#C58A24]" />}
+                        {isFail && <XCircle size={14} className="text-[#C34A4A]" />}
+                        <span>{rule.name}</span>
+                      </div>
+                      <span className="text-[10px] font-mono uppercase px-1.5 py-0.2 rounded bg-white border border-[#E4E8EF] text-[#697386]">
+                        RULE-BASED
+                      </span>
+                    </div>
+
+                    <p className="text-xs text-[#172033] leading-normal">{rule.reason}</p>
+
+                    {(rule.expected_value || rule.actual_value) && (
+                      <div className="mt-2 pt-2 border-t border-black/5 flex items-center justify-between text-[11px] text-[#697386]">
+                        <span>Expected: <strong>{rule.expected_value || '—'}</strong></span>
+                        <span>Actual: <strong className={isFail ? 'text-[#C34A4A]' : 'text-[#172033]'}>{rule.actual_value || '—'}</strong></span>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+
+              {/* Model-Based Fraud / Anomaly Check Evidence */}
+              {fraud && (
+                <div
+                  className={`p-3 rounded-[4px] border ${
+                    fraud.risk_category === 'LOW'
+                      ? 'bg-[#edf7f2]/60 border-[#21845B]/30'
+                      : 'bg-[#fdf1f1] border-[#C34A4A]/30'
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-1.5">
+                    <div className="flex items-center gap-1.5 font-bold text-[#172033]">
+                      {fraud.risk_category === 'LOW' ? (
+                        <ShieldCheck size={14} className="text-[#21845B]" />
+                      ) : (
+                        <ShieldAlert size={14} className="text-[#C34A4A]" />
+                      )}
+                      <span>Fraud & Suspicious Content Analysis</span>
+                    </div>
+                    <span className="text-[10px] font-mono uppercase px-1.5 py-0.2 rounded bg-white border border-[#E4E8EF] text-[#697386]">
+                      MODEL-BASED
+                    </span>
+                  </div>
+
+                  <p className="text-xs text-[#172033] leading-normal">{fraud.explanation}</p>
+
+                  <div className="mt-2 pt-2 border-t border-black/5 flex items-center justify-between text-[11px]">
+                    <span className="text-[#697386]">Risk Score: <strong className="font-mono text-[#172033]">{fraud.risk_score}/100</strong></span>
+                    <StatusBadge status={fraud.risk_category} size="sm" />
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </>
       )}
     </div>
   );
