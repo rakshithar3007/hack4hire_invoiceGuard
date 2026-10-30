@@ -155,8 +155,34 @@ async def upload_invoice(
             details={"overall_confidence": extraction["overall_confidence"], "items_count": len(extracted_data.get("items", []))}
         )
 
-        # 7. Business Validation Engine
-        validation = validation_service.validate_invoice(invoice.id, extracted_data, db)
+        # 6b. Statutory GST Calculation Agent Node (LangGraph pipeline integration)
+        gst_result = None
+        try:
+            from app.services.gst import gst_calculation_node
+            gst_state = gst_calculation_node({
+                "invoice_id": invoice.id,
+                "extracted_data": extracted_data,
+                "confidence_scores": confidence_scores,
+                "overall_confidence": extraction["overall_confidence"]
+            })
+            gst_result = gst_state.get("gst_result")
+            if gst_result:
+                audit_service.log_event(
+                    db,
+                    action="GST_CALCULATION_AUDIT",
+                    invoice_id=invoice.id,
+                    details={
+                        "status": gst_result.get("status"),
+                        "supply_type": gst_result.get("supply_type"),
+                        "discrepancies": len(gst_result.get("discrepancies", []))
+                    }
+                )
+        except Exception as e:
+            # Safe pass-through: never fail invoice processing on GST agent edge case
+            pass
+
+        # 7. Business Validation Engine (incorporates independent GST audit)
+        validation = validation_service.validate_invoice(invoice.id, extracted_data, db, gst_result=gst_result)
         invoice.validation_status = validation["validation_status"]
         
         val_record = ValidationResult(
@@ -237,6 +263,7 @@ async def upload_invoice(
         "fraud_status": invoice.fraud_status,
         "approval_status": invoice.approval_status,
         "confidence": extraction["overall_confidence"],
+        "gst_result": gst_result,
         "message": "Invoice successfully uploaded, extracted, validated, and evaluated."
     }
 

@@ -128,6 +128,7 @@ class ExtractionResultResponse(BaseModel):
     ocr_text: Optional[str] = None
     attempt_number: int
     status: str
+    gst_result: Optional[Dict[str, Any]] = None
     created_at: datetime
     class Config:
         from_attributes = True
@@ -206,6 +207,7 @@ class InvoiceResponse(BaseModel):
     created_at: datetime
     updated_at: Optional[datetime] = None
     items: List[InvoiceItemResponse] = []
+    gst_result: Optional[Dict[str, Any]] = None
     class Config:
         from_attributes = True
 

@@ -29,6 +29,8 @@ class Settings(BaseSettings):
     
     # External verification / GST mock
     GST_PORTAL_VERIFY_ENABLED: bool = True
+    GST_AGENT_ENABLED: bool = True
+    GST_TOLERANCE_INR: float = 0.05
 
     class Config:
         env_file = ".env"

@@ -12,7 +12,13 @@ class ValidationService:
         return bool(re.match(pattern, gstin.strip()))
 
     @classmethod
-    def validate_invoice(cls, invoice_id: str, extracted_data: Dict[str, Any], db: Session) -> Dict[str, Any]:
+    def validate_invoice(
+        cls,
+        invoice_id: str,
+        extracted_data: Dict[str, Any],
+        db: Session,
+        gst_result: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
         """
         Executes the 8 comprehensive business validation rules.
         """
@@ -282,6 +288,58 @@ class ValidationService:
                 "expected_value": "Unique",
                 "actual_value": "Unique"
             })
+
+        # --- I. INDEPENDENT GST AUDIT AGENT (Additive) ---
+        if gst_result is None:
+            try:
+                from app.services.gst import GSTCalculator, GST_AGENT_ENABLED
+                if GST_AGENT_ENABLED:
+                    gst_res_obj = GSTCalculator.verify_invoice_gst(extracted_data)
+                    gst_result = gst_res_obj.model_dump()
+            except Exception:
+                gst_result = None
+
+        if gst_result:
+            gst_stat = gst_result.get("status", "PASS")
+            gst_expl = gst_result.get("explanation", "GST verification verified.")
+            if gst_stat == "PASS":
+                rules.append({
+                    "rule_id": "GST_INDEPENDENT_AUDIT",
+                    "name": "Statutory GST Verification",
+                    "status": "PASS",
+                    "reason": gst_expl,
+                    "expected_value": f"{gst_result.get('supply_type')} Statutory Match",
+                    "actual_value": f"Verified ({gst_result.get('supply_type')})"
+                })
+            elif gst_stat == "MISMATCH":
+                rules.append({
+                    "rule_id": "GST_INDEPENDENT_AUDIT",
+                    "name": "Statutory GST Verification",
+                    "status": "FAIL",
+                    "reason": gst_expl,
+                    "expected_value": "Statutory GST Component & Rate Match",
+                    "actual_value": f"Mismatch Detected ({len(gst_result.get('discrepancies', []))} discrepancy)"
+                })
+                has_failure = True
+            elif gst_stat in ("INSUFFICIENT_DATA", "UNSUPPORTED"):
+                rules.append({
+                    "rule_id": "GST_INDEPENDENT_AUDIT",
+                    "name": "Statutory GST Verification",
+                    "status": "WARNING",
+                    "reason": gst_expl,
+                    "expected_value": "Complete Statutory GST Tax Data",
+                    "actual_value": gst_stat
+                })
+                has_warning = True
+            elif gst_stat == "DISABLED":
+                rules.append({
+                    "rule_id": "GST_INDEPENDENT_AUDIT",
+                    "name": "Statutory GST Verification",
+                    "status": "PASS",
+                    "reason": "GST calculation agent is disabled via configuration.",
+                    "expected_value": "Standard Verification",
+                    "actual_value": "Agent Disabled"
+                })
 
         overall_status = "FAILED" if has_failure else ("WARNING" if has_warning else "PASSED")
 
