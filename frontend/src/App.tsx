@@ -1,6 +1,7 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { ServerStatusProvider } from './contexts/ServerStatusContext';
 import { ToastProvider } from './components/Toast';
 import { MainLayout } from './layouts/MainLayout';
 
@@ -72,6 +73,14 @@ const AppRoutes: React.FC = () => {
         }
       />
       <Route
+        path="/verification"
+        element={
+          <MainLayout>
+            <FraudDetectionPage />
+          </MainLayout>
+        }
+      />
+      <Route
         path="/approvals"
         element={
           <MainLayout>
@@ -81,6 +90,14 @@ const AppRoutes: React.FC = () => {
       />
       <Route
         path="/reports"
+        element={
+          <MainLayout>
+            <ReportsPage />
+          </MainLayout>
+        }
+      />
+      <Route
+        path="/analytics"
         element={
           <MainLayout>
             <ReportsPage />
@@ -113,11 +130,13 @@ const AppRoutes: React.FC = () => {
 export const App: React.FC = () => {
   return (
     <AuthProvider>
-      <ToastProvider>
-        <Router>
-          <AppRoutes />
-        </Router>
-      </ToastProvider>
+      <ServerStatusProvider>
+        <ToastProvider>
+          <Router>
+            <AppRoutes />
+          </Router>
+        </ToastProvider>
+      </ServerStatusProvider>
     </AuthProvider>
   );
 };
