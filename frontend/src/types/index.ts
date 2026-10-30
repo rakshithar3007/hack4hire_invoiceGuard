@@ -1,8 +1,14 @@
+export type UserRole = 'admin' | 'employee' | 'manager';
+
 export interface User {
   id: number;
   name: string;
   email: string;
-  role: 'admin' | 'employee' | 'manager';
+  role: UserRole;
+  is_active?: boolean;
+  department?: string;
+  approval_limit?: number | null;
+  permissions?: string[];
   created_at: string;
 }
 
@@ -33,6 +39,8 @@ export interface Invoice {
   approval_status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'ESCALATED';
   uploaded_by?: number;
   uploader_name?: string;
+  assigned_manager_id?: number;
+  department?: string;
   created_at: string;
   updated_at?: string;
   items?: InvoiceItem[];

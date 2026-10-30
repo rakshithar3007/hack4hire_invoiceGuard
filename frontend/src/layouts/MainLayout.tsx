@@ -99,21 +99,40 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
     } catch {}
   };
 
-  // Navigation Items with Role Restrictions
+  // Navigation Items per 2.8 Role-Aware Access Control
   const role = user?.role?.toLowerCase() || 'employee';
 
-  const navItems = [
-    { label: 'Dashboard', icon: LayoutDashboard, path: '/', roles: ['admin', 'manager', 'employee'] },
-    { label: 'Invoice Management', icon: FileText, path: '/invoices', roles: ['admin', 'manager', 'employee'] },
-    { label: 'Verification & Fraud Analysis', icon: ShieldAlert, path: '/verification', roles: ['admin', 'manager', 'employee'] },
-    { label: 'Approval Center', icon: UserCheck, path: '/approvals', roles: ['admin', 'manager'], badge: 'Manager' },
-    { label: 'Analytics', icon: BarChart3, path: '/analytics', roles: ['admin', 'manager', 'employee'] },
-    { label: 'Audit Logs', icon: History, path: '/audit-logs', roles: ['admin', 'manager', 'employee'] },
-    { label: 'Settings', icon: Settings, path: '/settings', roles: ['admin', 'manager'] },
-  ];
+  const getNavItems = () => {
+    if (role === 'employee') {
+      return [
+        { label: 'Dashboard', icon: LayoutDashboard, path: '/' },
+        { label: 'My Invoices', icon: FileText, path: '/invoices' },
+        { label: 'Upload Invoice', icon: UploadCloud, path: '/upload' },
+        { label: 'My Reports', icon: BarChart3, path: '/analytics' },
+      ];
+    }
+    if (role === 'manager') {
+      return [
+        { label: 'Dashboard', icon: LayoutDashboard, path: '/' },
+        { label: 'Assigned Invoices', icon: FileText, path: '/invoices' },
+        { label: 'Verification & Fraud', icon: ShieldAlert, path: '/verification' },
+        { label: 'Approval Center', icon: UserCheck, path: '/approvals', badge: 'Review' },
+        { label: 'Team Analytics', icon: BarChart3, path: '/analytics' },
+      ];
+    }
+    // Admin
+    return [
+      { label: 'Dashboard', icon: LayoutDashboard, path: '/' },
+      { label: 'All Invoices', icon: FileText, path: '/invoices' },
+      { label: 'Verification & Fraud', icon: ShieldAlert, path: '/verification' },
+      { label: 'Approval Center', icon: UserCheck, path: '/approvals' },
+      { label: 'Analytics & Reports', icon: BarChart3, path: '/analytics' },
+      { label: 'Audit Logs', icon: History, path: '/audit-logs' },
+      { label: 'System Settings', icon: Settings, path: '/settings' },
+    ];
+  };
 
-  // Filter items visible to current role
-  const visibleNavItems = navItems.filter((item) => item.roles.includes(role));
+  const visibleNavItems = getNavItems();
 
   // Determine active breadcrumb title
   const getBreadcrumbs = () => {

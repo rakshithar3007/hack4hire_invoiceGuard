@@ -5,6 +5,7 @@ import { authApi } from '../services/api';
 interface AuthContextType {
   user: User | null;
   token: string | null;
+  isAuthenticated: boolean;
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
   register: (name: string, email: string, password: string, role?: string) => Promise<void>;
@@ -32,14 +33,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setUser(null);
         }
       } else {
-        // Fallback default demo user: Admin User
-        setUser({
-          id: 1,
-          name: 'Admin User',
-          email: 'admin@invoiceguard.ai',
-          role: 'admin',
-          created_at: new Date().toISOString()
-        });
+        setUser(null);
       }
       setIsLoading(false);
     };
@@ -82,22 +76,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       employee: { email: 'employee@invoiceguard.ai', pass: 'Employee@123' }
     };
     const target = roleCreds[role];
-    try {
-      await login(target.email, target.pass);
-    } catch {
-      // Fallback state update if backend offline
-      setUser({
-        id: role === 'admin' ? 1 : (role === 'manager' ? 3 : 2),
-        name: role === 'admin' ? 'Admin User' : (role === 'manager' ? 'Sarah Manager' : 'Alex Employee'),
-        email: target.email,
-        role: role,
-        created_at: new Date().toISOString()
-      });
-    }
+    await login(target.email, target.pass);
   };
 
   return (
-    <AuthContext.Provider value={{ user, token, isLoading, login, register, logout, quickSwitchRole }}>
+    <AuthContext.Provider value={{ user, token, isAuthenticated: !!user, isLoading, login, register, logout, quickSwitchRole }}>
       {children}
     </AuthContext.Provider>
   );

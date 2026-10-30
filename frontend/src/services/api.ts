@@ -33,6 +33,7 @@ export const invoiceApi = {
     headers: { 'Content-Type': 'multipart/form-data' }
   }),
   delete: (id: string) => api.delete(`/invoices/${id}`),
+  downloadUrl: (id: string) => `${API_BASE_URL}/invoices/${id}/download`,
 };
 
 // Extraction & Independent Checker APIs
@@ -64,6 +65,15 @@ export const approvalApi = {
   escalate: (invoiceId: string, data: { reason?: string }) => api.post(`/invoices/${invoiceId}/escalate`, data),
 };
 
+// Users & Roles Management APIs (Admin)
+export const usersApi = {
+  getAll: () => api.get('/users'),
+  create: (data: any) => api.post('/users', data),
+  updateRole: (userId: number, role: string) => api.put(`/users/${userId}/role`, { role }),
+  updateStatus: (userId: number, isActive: boolean) => api.put(`/users/${userId}/status`, { is_active: isActive }),
+  updateLimit: (userId: number, approvalLimit: number) => api.put(`/users/${userId}/limit`, { approval_limit: approvalLimit }),
+};
+
 // Suppliers & Purchase Orders
 export const supplierApi = {
   getAll: (params?: any) => api.get('/suppliers', { params }),
@@ -83,6 +93,9 @@ export const dashboardApi = {
   getStats: () => api.get('/dashboard/stats'),
   getAnalytics: () => api.get('/dashboard/analytics'),
   getRecent: () => api.get('/dashboard/recent-invoices'),
+  getEmployee: () => api.get('/dashboard/employee'),
+  getManager: () => api.get('/dashboard/manager'),
+  getAdmin: () => api.get('/dashboard/admin'),
 };
 
 // Reports & Export

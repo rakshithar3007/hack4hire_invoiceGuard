@@ -2,20 +2,20 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ServerStatusProvider } from './contexts/ServerStatusContext';
-import { ToastProvider } from './components/Toast';
 import { MainLayout } from './layouts/MainLayout';
-
-// Pages
-import { DashboardPage } from './pages/DashboardPage';
-import { UploadPage } from './pages/UploadPage';
-import { InvoicesPage } from './pages/InvoicesPage';
-import { ExtractionPage } from './pages/ExtractionPage';
-import { FraudDetectionPage } from './pages/FraudDetectionPage';
-import { ApprovalPage } from './pages/ApprovalPage';
-import { ReportsPage } from './pages/ReportsPage';
-import { AuditLogsPage } from './pages/AuditLogsPage';
-import { SettingsPage } from './pages/SettingsPage';
-import { LoginPage } from './pages/LoginPage';
+import { ProtectedRoute, ToastProvider } from './components';
+import {
+  DashboardPage,
+  UploadPage,
+  InvoicesPage,
+  ExtractionPage,
+  FraudDetectionPage,
+  ApprovalPage,
+  ReportsPage,
+  AuditLogsPage,
+  SettingsPage,
+  LoginPage,
+} from './pages';
 
 const AppRoutes: React.FC = () => {
   return (
@@ -26,87 +26,105 @@ const AppRoutes: React.FC = () => {
       <Route
         path="/"
         element={
-          <MainLayout>
-            <DashboardPage />
-          </MainLayout>
+          <ProtectedRoute>
+            <MainLayout>
+              <DashboardPage />
+            </MainLayout>
+          </ProtectedRoute>
         }
       />
       <Route
         path="/upload"
         element={
-          <MainLayout>
-            <UploadPage />
-          </MainLayout>
+          <ProtectedRoute>
+            <MainLayout>
+              <UploadPage />
+            </MainLayout>
+          </ProtectedRoute>
         }
       />
       <Route
         path="/invoices"
         element={
-          <MainLayout>
-            <InvoicesPage />
-          </MainLayout>
+          <ProtectedRoute>
+            <MainLayout>
+              <InvoicesPage />
+            </MainLayout>
+          </ProtectedRoute>
         }
       />
       <Route
         path="/extraction"
         element={
-          <MainLayout>
-            <ExtractionPage />
-          </MainLayout>
+          <ProtectedRoute>
+            <MainLayout>
+              <ExtractionPage />
+            </MainLayout>
+          </ProtectedRoute>
         }
       />
-      {/* Verification & Fraud Analysis (Consolidated) */}
+      {/* Verification & Fraud Analysis */}
       <Route
         path="/verification"
         element={
-          <MainLayout>
-            <FraudDetectionPage />
-          </MainLayout>
+          <ProtectedRoute allowedRoles={['manager', 'admin']}>
+            <MainLayout>
+              <FraudDetectionPage />
+            </MainLayout>
+          </ProtectedRoute>
         }
       />
       {/* Deprecated duplicate routes redirect to single canonical destination */}
       <Route path="/validation" element={<Navigate to="/verification" replace />} />
       <Route path="/fraud" element={<Navigate to="/verification" replace />} />
 
-      {/* Approval Center */}
+      {/* Approval Center (Manager & Admin only) */}
       <Route
         path="/approvals"
         element={
-          <MainLayout>
-            <ApprovalPage />
-          </MainLayout>
+          <ProtectedRoute allowedRoles={['manager', 'admin']}>
+            <MainLayout>
+              <ApprovalPage />
+            </MainLayout>
+          </ProtectedRoute>
         }
       />
 
-      {/* Analytics (Canonical destination) */}
+      {/* Analytics (Manager & Admin only) */}
       <Route
         path="/analytics"
         element={
-          <MainLayout>
-            <ReportsPage />
-          </MainLayout>
+          <ProtectedRoute allowedRoles={['manager', 'admin']}>
+            <MainLayout>
+              <ReportsPage />
+            </MainLayout>
+          </ProtectedRoute>
         }
       />
       <Route path="/reports" element={<Navigate to="/analytics" replace />} />
 
-      {/* Audit Logs (Canonical destination) */}
+      {/* Audit Logs (Manager & Admin only) */}
       <Route
         path="/audit-logs"
         element={
-          <MainLayout>
-            <AuditLogsPage />
-          </MainLayout>
+          <ProtectedRoute allowedRoles={['manager', 'admin']}>
+            <MainLayout>
+              <AuditLogsPage />
+            </MainLayout>
+          </ProtectedRoute>
         }
       />
       <Route path="/audit" element={<Navigate to="/audit-logs" replace />} />
 
-      {/* Settings */}
+      {/* Settings (Admin only) */}
       <Route
         path="/settings"
         element={
-          <MainLayout>
-            <SettingsPage />
-          </MainLayout>
+          <ProtectedRoute allowedRoles={['admin']}>
+            <MainLayout>
+              <SettingsPage />
+            </MainLayout>
+          </ProtectedRoute>
         }
       />
 
