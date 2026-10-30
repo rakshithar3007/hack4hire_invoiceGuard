@@ -1,0 +1,225 @@
+{
+  "name": "InvoiceGuard AI - Intelligent Processing & Follow-up Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "new-invoice",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "node-1-webhook",
+      "name": "Webhook - New Invoice",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [
+        200,
+        300
+      ],
+      "webhookId": "invoiceguard-new-invoice"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Node 2: Validate Invoice Data\nconst body = $input.first().json.body || $input.first().json;\n\nconst hasId = Boolean(body.invoice_id);\nconst hasSupplier = Boolean(body.supplier_name);\nconst hasAmount = body.total_amount !== undefined && !isNaN(Number(body.total_amount));\nconst hasValidation = Boolean(body.validation_status);\nconst hasFraud = Boolean(body.fraud_risk);\n\nconst isValid = hasId && hasSupplier && hasAmount && hasValidation && hasFraud;\n\nreturn [{\n  json: {\n    ...body,\n    is_valid: isValid,\n    validation_errors: isValid ? [] : [\n      !hasId ? 'Missing invoice_id' : null,\n      !hasSupplier ? 'Missing supplier_name' : null,\n      !hasAmount ? 'Invalid or missing total_amount' : null,\n      !hasValidation ? 'Missing validation_status' : null,\n      !hasFraud ? 'Missing fraud_risk' : null\n    ].filter(Boolean),\n    validated_at: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "node-2-validate",
+      "name": "Validate Invoice Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.is_valid }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "node-3-if",
+      "name": "Is Data Valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        680,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:8000/api/n8n/notification-result",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"invoice_id\": \"{{ $json.invoice_id }}\",\n  \"workflow_id\": \"n8n_invoiceguard_v1\",\n  \"execution_status\": \"SUCCESS\",\n  \"details\": {\n    \"supplier\": \"{{ $json.supplier_name }}\",\n    \"amount\": {{ $json.total_amount }},\n    \"fraud_risk\": \"{{ $json.fraud_risk }}\",\n    \"validation\": \"{{ $json.validation_status }}\",\n    \"summary\": \"AI summary: Invoice processed with {{ $json.fraud_risk }} fraud risk and {{ $json.validation_status }} validation status.\"\n  }\n}",
+        "options": {}
+      },
+      "id": "node-4-ai-storage",
+      "name": "AI Analysis & Storage",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        920,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"status\": \"SUCCESS\",\n  \"message\": \"Invoice {{ $('Validate Invoice Data').item.json.invoice_id }} notification orchestrated successfully.\",\n  \"requires_manager_review\": {{ $('Validate Invoice Data').item.json.approval_status === 'PENDING' }},\n  \"fraud_alert\": {{ $('Validate Invoice Data').item.json.fraud_risk === 'HIGH' }}\n}",
+        "options": {}
+      },
+      "id": "node-5-notification-response",
+      "name": "Notifications & Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1200,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseCode": 422,
+        "responseBody": "={\n  \"status\": \"ERROR\",\n  \"error\": \"VALIDATION_FAILED\",\n  \"message\": \"Incoming invoice data validation failed.\",\n  \"details\": {{ $json.validation_errors }}\n}",
+        "options": {}
+      },
+      "id": "node-6-respond-error",
+      "name": "Respond - Validation Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        920,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 9 * * *"
+            }
+          ]
+        }
+      },
+      "id": "node-7-schedule",
+      "name": "Schedule - Daily Follow Up",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        560,
+        580
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "http://127.0.0.1:8000/api/n8n/follow-up-queue",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-8-followup-processing",
+      "name": "Follow-up Processing",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        820,
+        580
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook - New Invoice": {
+      "main": [
+        [
+          {
+            "node": "Validate Invoice Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Invoice Data": {
+      "main": [
+        [
+          {
+            "node": "Is Data Valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Data Valid?": {
+      "main": [
+        [
+          {
+            "node": "AI Analysis & Storage",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond - Validation Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Analysis & Storage": {
+      "main": [
+        [
+          {
+            "node": "Notifications & Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule - Daily Follow Up": {
+      "main": [
+        [
+          {
+            "node": "Follow-up Processing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
