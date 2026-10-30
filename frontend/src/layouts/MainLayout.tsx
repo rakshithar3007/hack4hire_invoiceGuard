@@ -153,17 +153,18 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
           } ${mobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}
         >
           {/* Brand Header */}
-          <div className="h-14 flex items-center justify-between px-3.5 border-b border-slate-800/80 bg-[#0f172a]/50">
-            <Link to="/" className="flex items-center gap-2 min-w-0">
-              <div className="w-7 h-7 rounded-[4px] bg-[#2457A6] flex items-center justify-center text-white shrink-0 font-bold text-xs">
+          <div className="h-14 flex items-center justify-between px-3.5 border-b border-slate-800/80 bg-slate-900/60">
+            <Link to="/" className="flex items-center gap-2.5 min-w-0">
+              <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-blue-600 via-indigo-600 to-cyan-400 flex items-center justify-center text-white shrink-0 font-extrabold text-xs shadow-md shadow-indigo-500/30">
                 IG
               </div>
               {!isCollapsed && (
                 <div className="min-w-0">
                   <div className="flex items-center gap-1.5 font-bold text-white text-sm tracking-tight leading-none">
                     <span>InvoiceGuard</span>
+                    <span className="bg-indigo-500/30 text-indigo-300 text-[9px] font-mono px-1 py-0.2 rounded border border-indigo-400/30">AI</span>
                   </div>
-                  <span className="text-[10px] text-[#697386] font-medium">Enterprise AP</span>
+                  <span className="text-[10px] text-slate-400 font-medium">Enterprise AP</span>
                 </div>
               )}
             </Link>
@@ -171,7 +172,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
             <button
               type="button"
               onClick={toggleCollapse}
-              className="hidden md:flex text-[#697386] hover:text-white p-1 rounded hover:bg-white/5 cursor-pointer"
+              className="hidden md:flex text-slate-400 hover:text-white p-1 rounded hover:bg-white/5 cursor-pointer"
               title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
             >
               <Menu size={14} />
@@ -179,14 +180,14 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
             <button
               type="button"
               onClick={() => setMobileOpen(false)}
-              className="md:hidden text-[#697386] hover:text-white p-1 rounded"
+              className="md:hidden text-slate-400 hover:text-white p-1 rounded"
             >
               <X size={16} />
             </button>
           </div>
 
           {/* Navigation Links */}
-          <nav className="flex-1 overflow-y-auto px-2 py-3 space-y-0.5">
+          <nav className="flex-1 overflow-y-auto px-2 py-3 space-y-1">
             {visibleNavItems.map((item) => {
               const Icon = item.icon;
               const isActive =
@@ -202,18 +203,18 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
                   key={item.path}
                   to={item.path}
                   title={isCollapsed ? item.label : undefined}
-                  className={`flex items-center gap-2.5 px-2.5 py-2 rounded-[4px] text-xs transition-colors ${
+                  className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-all duration-150 ${
                     isActive
-                      ? 'bg-[#2457A6] text-white font-semibold'
-                      : 'text-slate-300 hover:text-white hover:bg-white/5'
+                      ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold shadow-xs shadow-indigo-500/20'
+                      : 'text-slate-300 hover:text-white hover:bg-slate-800/60'
                   }`}
                 >
-                  <Icon size={16} className="shrink-0" />
+                  <Icon size={16} className={`shrink-0 ${isActive ? 'text-white' : 'text-slate-400'}`} />
                   {!isCollapsed && (
                     <span className="flex-1 truncate">{item.label}</span>
                   )}
                   {!isCollapsed && item.badge && role === 'admin' && (
-                    <span className="text-[9px] uppercase font-mono px-1 py-0.2 rounded bg-white/10 text-slate-300">
+                    <span className="text-[9px] uppercase font-mono px-1.5 py-0.5 rounded bg-white/15 text-white font-semibold">
                       {item.badge}
                     </span>
                   )}
@@ -221,6 +222,23 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
               );
             })}
           </nav>
+
+          {/* Live Engine Status Card */}
+          {!isCollapsed && (
+            <div className="mx-2 mb-2 p-2.5 rounded-lg bg-slate-900/90 border border-slate-800 text-[10px]">
+              <div className="flex items-center gap-1.5 text-emerald-400 font-semibold mb-1">
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                </span>
+                <span>LangGraph AI Active</span>
+              </div>
+              <p className="text-slate-400 text-[9px] leading-tight font-mono">
+                GST Agent: Deterministic<br />
+                Audit Trail: SHA-256 Verified
+              </p>
+            </div>
+          )}
 
           {/* Sidebar Footer with Active Role Indicator */}
           <div className="p-3 border-t border-slate-800 text-xs">

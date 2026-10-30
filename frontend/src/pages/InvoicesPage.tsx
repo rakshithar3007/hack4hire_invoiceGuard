@@ -152,31 +152,32 @@ export const InvoicesPage: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Page Header */}
-      <div className="bg-white p-5 rounded-lg border border-[var(--border)] shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs relative overflow-hidden flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="absolute top-0 left-0 right-0 h-[2.5px] bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600" />
         <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-xl font-bold text-[var(--text-primary)]">Invoices Master Ledger</h1>
-            <span className="text-[11px] font-bold px-2 py-0.5 rounded bg-[var(--surface-sunken)] border border-[var(--border)] text-[var(--text-secondary)]">
+          <div className="flex items-center gap-2.5">
+            <h1 className="text-xl font-bold text-slate-900 font-sans tracking-tight">Invoice Master Ledger</h1>
+            <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-slate-100 border border-slate-200 text-slate-600 font-mono">
               {invoices.length} Total Records
             </span>
           </div>
-          <p className="text-xs text-[var(--text-secondary)] mt-1">
-            Central repository of ingested invoices, OCR metadata extractions, validation rules, and approval records.
+          <p className="text-xs text-slate-500 mt-1">
+            Centralized ledger with OCR extractions, deterministic GST verification, SHA-256 hash detection, and dual-control approvals.
           </p>
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
           <button
             onClick={handleClientCsvExport}
-            className="px-3 py-1.5 bg-white hover:bg-[var(--surface-sunken)] text-[var(--text-primary)] border border-[var(--border)] font-semibold text-xs rounded transition flex items-center gap-1.5 cursor-pointer"
+            className="px-3.5 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 font-semibold text-xs rounded-xl shadow-xs transition flex items-center gap-1.5 cursor-pointer hover:-translate-y-0.5 active:translate-y-0"
           >
-            <Download className="w-3.5 h-3.5 text-[var(--text-secondary)]" />
+            <Download className="w-3.5 h-3.5 text-slate-500" />
             <span>Export CSV</span>
           </button>
 
           <button
             onClick={fetchInvoices}
-            className="p-1.5 bg-white hover:bg-[var(--surface-sunken)] text-[var(--text-secondary)] border border-[var(--border)] rounded transition cursor-pointer"
+            className="p-2 bg-white hover:bg-slate-50 text-slate-600 border border-slate-200 rounded-xl transition cursor-pointer"
             title="Refresh Invoices"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
@@ -184,49 +185,63 @@ export const InvoicesPage: React.FC = () => {
 
           <button
             onClick={() => navigate('/upload')}
-            className="px-3.5 py-1.5 bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white font-semibold text-xs rounded shadow-xs transition flex items-center gap-1.5 cursor-pointer"
+            className="px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold text-xs rounded-xl shadow-md shadow-blue-500/20 transition flex items-center gap-1.5 cursor-pointer hover:-translate-y-0.5 active:translate-y-0"
           >
-            <Plus className="w-3.5 h-3.5" />
+            <Plus className="w-4 h-4" />
             <span>Upload Invoice</span>
           </button>
         </div>
       </div>
 
+      {/* Quick Interactive Status Filter Tabs */}
+      <div className="flex items-center gap-2 overflow-x-auto pb-1">
+        {[
+          { key: 'ALL', label: 'All Invoices', count: invoices.length },
+          { key: 'PENDING', label: 'Pending Review', count: invoices.filter(i => (i.approval_status || '').toUpperCase().includes('PENDING')).length },
+          { key: 'APPROVED', label: 'Approved', count: invoices.filter(i => (i.approval_status || '').toUpperCase() === 'APPROVED').length },
+          { key: 'REJECTED', label: 'Rejected', count: invoices.filter(i => (i.approval_status || '').toUpperCase() === 'REJECTED').length },
+          { key: 'ESCALATED', label: 'Escalated', count: invoices.filter(i => (i.approval_status || '').toUpperCase() === 'ESCALATED').length },
+        ].map(tab => (
+          <button
+            key={tab.key}
+            type="button"
+            onClick={() => handleStatusChange(tab.key)}
+            className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-2 transition cursor-pointer shrink-0 ${
+              statusFilter === tab.key
+                ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-xs'
+                : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+            }`}
+          >
+            <span>{tab.label}</span>
+            <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono font-bold ${
+              statusFilter === tab.key ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
+            }`}>
+              {tab.count}
+            </span>
+          </button>
+        ))}
+      </div>
+
       {/* Filter and Search Bar */}
-      <div className="bg-white p-4 rounded-lg border border-[var(--border)] shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="relative flex-1 max-w-md">
-          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
+          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
             type="text"
             placeholder="Search by ID, invoice number, or vendor..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-9 pr-4 py-1.5 text-xs bg-[var(--surface-sunken)] border border-[var(--border)] rounded text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--accent)] focus:bg-white transition"
+            className="w-full pl-9 pr-4 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg text-slate-800 placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:bg-white transition"
           />
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
           <div className="flex items-center gap-1.5">
-            <label className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider">Status:</label>
-            <select
-              value={statusFilter}
-              onChange={(e) => handleStatusChange(e.target.value)}
-              className="text-xs font-medium px-2.5 py-1.5 bg-white border border-[var(--border)] rounded text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent)] cursor-pointer"
-            >
-              <option value="ALL">All Statuses</option>
-              <option value="PENDING">Pending</option>
-              <option value="APPROVED">Approved</option>
-              <option value="REJECTED">Rejected</option>
-              <option value="ESCALATED">Escalated</option>
-            </select>
-          </div>
-
-          <div className="flex items-center gap-1.5">
-            <label className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider">Risk:</label>
+            <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Risk Level:</label>
             <select
               value={riskFilter}
               onChange={(e) => setRiskFilter(e.target.value)}
-              className="text-xs font-medium px-2.5 py-1.5 bg-white border border-[var(--border)] rounded text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent)] cursor-pointer"
+              className="text-xs font-medium px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-slate-800 focus:outline-none focus:border-indigo-500 cursor-pointer"
             >
               <option value="ALL">All Risks</option>
               <option value="LOW">Low Risk</option>
@@ -238,11 +253,11 @@ export const InvoicesPage: React.FC = () => {
           {(statusFilter !== 'ALL' || riskFilter !== 'ALL' || search) && (
             <button
               onClick={() => {
-                setStatusFilter('ALL');
+                handleStatusChange('ALL');
                 setRiskFilter('ALL');
                 setSearch('');
               }}
-              className="text-[11px] text-[var(--accent)] hover:underline ml-1 cursor-pointer font-medium"
+              className="text-[11px] text-indigo-600 hover:underline ml-1 cursor-pointer font-semibold"
             >
               Reset filters
             </button>
