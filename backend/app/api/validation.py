@@ -3,15 +3,25 @@ from sqlalchemy.orm import Session
 from sqlalchemy import desc
 
 from app.database.session import get_db
-from app.models.models import Invoice, ValidationResult, ExtractionResult
+from app.models.models import Invoice, ValidationResult, ExtractionResult, User
 from app.schemas.schemas import ValidationResultResponse
+from app.core.permissions import get_current_active_user, check_invoice_access, require_manager_or_admin
 from app.services.validation_service import validation_service
 from app.services.audit_service import audit_service
 
 router = APIRouter(prefix="/invoices", tags=["Business Validation"])
 
 @router.get("/{invoice_id}/validation")
-def get_validation(invoice_id: str, db: Session = Depends(get_db)):
+def get_validation(
+    invoice_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    invoice = db.query(Invoice).filter(Invoice.id == invoice_id).first()
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    check_invoice_access(invoice, current_user, "view_validation")
+
     result = db.query(ValidationResult).filter(
         ValidationResult.invoice_id == invoice_id
     ).order_by(desc(ValidationResult.id)).first()
@@ -39,10 +49,16 @@ def get_validation(invoice_id: str, db: Session = Depends(get_db)):
     return result
 
 @router.post("/{invoice_id}/validate")
-def execute_validation(invoice_id: str, db: Session = Depends(get_db)):
+def execute_validation(
+    invoice_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_manager_or_admin)
+):
     invoice = db.query(Invoice).filter(Invoice.id == invoice_id).first()
     if not invoice:
         raise HTTPException(status_code=404, detail="Invoice not found")
+
+    check_invoice_access(invoice, current_user, "execute_validation")
 
     last_ext = db.query(ExtractionResult).filter(
         ExtractionResult.invoice_id == invoice_id

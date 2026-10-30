@@ -5,14 +5,25 @@ from sqlalchemy.orm import Session
 from sqlalchemy import desc
 
 from app.database.session import get_db
-from app.models.models import InvoiceSnapshot, Invoice
+from app.models.models import InvoiceSnapshot, Invoice, User
 from app.schemas.schemas import InvoiceSnapshotResponse
+from app.core.permissions import get_current_active_user, check_invoice_access
 from app.services.snapshot_service import snapshot_service
 
 router = APIRouter(prefix="/invoices", tags=["Snapshots"])
 
 @router.get("/{invoice_id}/snapshot")
-def get_snapshot(invoice_id: str, version: Optional[int] = None, db: Session = Depends(get_db)):
+def get_snapshot(
+    invoice_id: str,
+    version: Optional[int] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    invoice = db.query(Invoice).filter(Invoice.id == invoice_id).first()
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    check_invoice_access(invoice, current_user, "view_snapshot")
+
     query = db.query(InvoiceSnapshot).filter(InvoiceSnapshot.invoice_id == invoice_id)
     if version:
         snapshot = query.filter(InvoiceSnapshot.version == version).first()
@@ -20,10 +31,6 @@ def get_snapshot(invoice_id: str, version: Optional[int] = None, db: Session = D
         snapshot = query.order_by(desc(InvoiceSnapshot.version)).first()
 
     if not snapshot:
-        # Generate on demand if missing
-        invoice = db.query(Invoice).filter(Invoice.id == invoice_id).first()
-        if not invoice:
-            raise HTTPException(status_code=404, detail="Invoice not found")
         snapshot = snapshot_service.create_snapshot(invoice_id, db)
 
     # Also list all available versions
@@ -37,7 +44,16 @@ def get_snapshot(invoice_id: str, version: Optional[int] = None, db: Session = D
     }
 
 @router.get("/{invoice_id}/snapshot/download")
-def download_snapshot(invoice_id: str, version: Optional[int] = None, db: Session = Depends(get_db)):
+def download_snapshot(
+    invoice_id: str,
+    version: Optional[int] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    invoice = db.query(Invoice).filter(Invoice.id == invoice_id).first()
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    check_invoice_access(invoice, current_user, "download_snapshot")
     query = db.query(InvoiceSnapshot).filter(InvoiceSnapshot.invoice_id == invoice_id)
     if version:
         snapshot = query.filter(InvoiceSnapshot.version == version).first()

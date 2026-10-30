@@ -11,9 +11,13 @@ class User(Base):
     email = Column(String(150), unique=True, index=True, nullable=False)
     password_hash = Column(String(255), nullable=False)
     role = Column(String(50), nullable=False, default="employee")  # admin, employee, manager
+    is_active = Column(Boolean, default=True, nullable=False)
+    department = Column(String(100), default="General", nullable=False)
+    approval_limit = Column(Float, default=100000.0, nullable=True)  # Manager limit in INR (None/0 for unlimited or NA)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     
-    invoices_uploaded = relationship("Invoice", back_populates="uploader")
+    invoices_uploaded = relationship("Invoice", foreign_keys="[Invoice.uploaded_by]", back_populates="uploader")
+    invoices_assigned = relationship("Invoice", foreign_keys="[Invoice.assigned_manager_id]", back_populates="assigned_manager")
     approvals_made = relationship("Approval", back_populates="manager")
     notifications = relationship("Notification", back_populates="user")
     audit_logs = relationship("AuditLog", back_populates="user")
@@ -63,11 +67,14 @@ class Invoice(Base):
     approval_status = Column(String(50), default="PENDING")     # PENDING, APPROVED, REJECTED, ESCALATED
     
     uploaded_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    assigned_manager_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    department = Column(String(100), default="General", nullable=False)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
     
     # Relationships
-    uploader = relationship("User", back_populates="invoices_uploaded")
+    uploader = relationship("User", foreign_keys=[uploaded_by], back_populates="invoices_uploaded")
+    assigned_manager = relationship("User", foreign_keys=[assigned_manager_id], back_populates="invoices_assigned")
     supplier = relationship("Supplier", back_populates="invoices")
     items = relationship("InvoiceItem", back_populates="invoice", cascade="all, delete-orphan")
     extraction_results = relationship("ExtractionResult", back_populates="invoice", cascade="all, delete-orphan")

@@ -8,6 +8,25 @@ class UserCreate(BaseModel):
     email: EmailStr
     password: str
     role: Optional[str] = "employee"
+    department: Optional[str] = "General"
+    approval_limit: Optional[float] = None
+
+class UserAdminCreate(BaseModel):
+    name: str
+    email: EmailStr
+    password: str
+    role: str = "employee"
+    department: str = "General"
+    approval_limit: Optional[float] = None
+
+class UserRoleUpdate(BaseModel):
+    role: str
+
+class UserStatusUpdate(BaseModel):
+    is_active: bool
+
+class UserLimitUpdate(BaseModel):
+    approval_limit: float
 
 class UserLogin(BaseModel):
     email: EmailStr
@@ -18,6 +37,10 @@ class UserResponse(BaseModel):
     name: str
     email: str
     role: str
+    is_active: bool = True
+    department: str = "General"
+    approval_limit: Optional[float] = None
+    permissions: Optional[List[str]] = None
     created_at: datetime
     class Config:
         from_attributes = True
@@ -204,6 +227,8 @@ class InvoiceResponse(BaseModel):
     approval_status: str
     uploaded_by: Optional[int] = None
     uploader_name: Optional[str] = None
+    assigned_manager_id: Optional[int] = None
+    department: Optional[str] = "General"
     created_at: datetime
     updated_at: Optional[datetime] = None
     items: List[InvoiceItemResponse] = []

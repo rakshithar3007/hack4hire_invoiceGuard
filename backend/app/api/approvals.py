@@ -1,12 +1,16 @@
 from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from sqlalchemy import desc
+from sqlalchemy import desc, or_
 
 from app.database.session import get_db
 from app.models.models import Invoice, Approval, User, Notification
 from app.schemas.schemas import ApprovalRequest, ApprovalResponse, InvoiceResponse
-from app.core.security import get_current_user, require_roles
+from app.core.permissions import (
+    get_current_active_user, require_manager_or_admin,
+    check_approval_eligibility, check_invoice_access,
+    ROLE_MANAGER, ROLE_ADMIN
+)
 from app.services.audit_service import audit_service
 from app.services.snapshot_service import snapshot_service
 from app.services.n8n_service import n8n_service
@@ -14,14 +18,33 @@ from app.services.n8n_service import n8n_service
 router = APIRouter(prefix="", tags=["Approvals"])
 
 @router.get("/approvals/pending", response_model=List[InvoiceResponse])
-def get_pending_approvals(db: Session = Depends(get_db)):
+def get_pending_approvals(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_manager_or_admin)
+):
     """
     Returns all invoices requiring manager review (PENDING or ESCALATED).
-    Matches the Manager Approval Dashboard shown in reference video frame 15!
+    Enforces scope: managers see invoices within their department and approval limit,
+    excluding invoices they uploaded themselves (Maker-Checker).
     """
-    invoices = db.query(Invoice).filter(
+    query = db.query(Invoice).filter(
         Invoice.approval_status.in_(["PENDING", "ESCALATED"])
-    ).order_by(desc(Invoice.created_at)).all()
+    )
+
+    if (current_user.role or "").lower() == ROLE_MANAGER:
+        dept = getattr(current_user, "department", "General") or "General"
+        # Maker-Checker exclusion: do not display own uploaded invoices in manager approval queue
+        query = query.filter(
+            or_(
+                Invoice.assigned_manager_id == current_user.id,
+                Invoice.department == dept,
+                Invoice.department == "General"
+            )
+        )
+        if current_user.id:
+            query = query.filter(Invoice.uploaded_by != current_user.id)
+
+    invoices = query.order_by(desc(Invoice.created_at)).all()
 
     result = []
     for inv in invoices:
@@ -43,6 +66,8 @@ def get_pending_approvals(db: Session = Depends(get_db)):
             approval_status=inv.approval_status,
             uploaded_by=inv.uploaded_by,
             uploader_name=inv.uploader.name if inv.uploader else "System",
+            assigned_manager_id=getattr(inv, "assigned_manager_id", None),
+            department=getattr(inv, "department", "General") or "General",
             created_at=inv.created_at,
             updated_at=inv.updated_at,
             items=inv.items or []
@@ -54,12 +79,15 @@ async def approve_invoice(
     invoice_id: str,
     req: ApprovalRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(["manager", "admin"]))
+    current_user: User = Depends(require_manager_or_admin)
 ):
     # Database transaction with row lock
     invoice = db.query(Invoice).filter(Invoice.id == invoice_id).first()
     if not invoice:
         raise HTTPException(status_code=404, detail="Invoice not found")
+
+    # Enforce Maker-Checker, Scope, and Approval Limit
+    check_approval_eligibility(invoice, current_user)
 
     if invoice.approval_status == "APPROVED":
         raise HTTPException(status_code=400, detail="Invoice has already been approved.")
@@ -112,7 +140,7 @@ async def reject_invoice(
     invoice_id: str,
     req: ApprovalRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(["manager", "admin"]))
+    current_user: User = Depends(require_manager_or_admin)
 ):
     if not req.reason or len(req.reason.strip()) < 5:
         raise HTTPException(
@@ -123,6 +151,9 @@ async def reject_invoice(
     invoice = db.query(Invoice).filter(Invoice.id == invoice_id).first()
     if not invoice:
         raise HTTPException(status_code=404, detail="Invoice not found")
+
+    # Enforce Maker-Checker and Scope on rejection
+    check_approval_eligibility(invoice, current_user)
 
     invoice.approval_status = "REJECTED"
 
@@ -161,11 +192,13 @@ async def escalate_invoice(
     invoice_id: str,
     req: ApprovalRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(["manager", "admin"]))
+    current_user: User = Depends(require_manager_or_admin)
 ):
     invoice = db.query(Invoice).filter(Invoice.id == invoice_id).first()
     if not invoice:
         raise HTTPException(status_code=404, detail="Invoice not found")
+
+    check_invoice_access(invoice, current_user, "escalate")
 
     invoice.approval_status = "ESCALATED"
 

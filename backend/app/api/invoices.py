@@ -9,7 +9,11 @@ from sqlalchemy import or_, desc
 from app.database.session import get_db
 from app.models.models import Invoice, User, Supplier, InvoiceItem, ExtractionResult, ValidationResult, FraudAnalysis
 from app.schemas.schemas import InvoiceResponse
-from app.core.security import get_current_user, get_current_user_optional, require_roles
+from app.core.security import get_current_user_optional
+from app.core.permissions import (
+    get_current_active_user, check_invoice_access, require_admin,
+    ROLE_EMPLOYEE, ROLE_MANAGER, ROLE_ADMIN
+)
 from app.core.config import settings
 from app.services.ocr_service import ocr_service
 from app.services.extraction_service import extraction_service
@@ -25,7 +29,7 @@ router = APIRouter(prefix="/invoices", tags=["Invoices"])
 async def upload_invoice(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
-    current_user: Optional[User] = Depends(get_current_user_optional)
+    current_user: User = Depends(get_current_active_user)
 ):
     """
     Handles complete upload and straight-through processing pipeline:
@@ -70,6 +74,7 @@ async def upload_invoice(
         f.write(contents)
 
     user_id = current_user.id if current_user else None
+    user_dept = getattr(current_user, "department", "General") or "General"
 
     # 4. Create base invoice record
     invoice = Invoice(
@@ -81,7 +86,8 @@ async def upload_invoice(
         validation_status="PENDING",
         fraud_status="PENDING",
         approval_status="PENDING",
-        uploaded_by=user_id
+        uploaded_by=user_id,
+        department=user_dept
     )
     db.add(invoice)
     db.commit()
@@ -276,9 +282,26 @@ def get_invoices(
     supplier_id: Optional[int] = None,
     limit: int = 100,
     offset: int = 0,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
 ):
     query = db.query(Invoice).order_by(desc(Invoice.created_at))
+
+    # Object-level role filter
+    user_role = (current_user.role or ROLE_EMPLOYEE).lower()
+    if user_role == ROLE_EMPLOYEE:
+        query = query.filter(Invoice.uploaded_by == current_user.id)
+    elif user_role == ROLE_MANAGER:
+        dept = getattr(current_user, "department", "General") or "General"
+        query = query.filter(
+            or_(
+                Invoice.uploaded_by == current_user.id,
+                Invoice.assigned_manager_id == current_user.id,
+                Invoice.department == dept,
+                Invoice.department == "General"
+            )
+        )
+    # Admin has unrestricted access
 
     if search:
         s = f"%{search}%"
@@ -320,6 +343,8 @@ def get_invoices(
             approval_status=inv.approval_status,
             uploaded_by=inv.uploaded_by,
             uploader_name=inv.uploader.name if inv.uploader else "System",
+            assigned_manager_id=getattr(inv, "assigned_manager_id", None),
+            department=getattr(inv, "department", "General") or "General",
             created_at=inv.created_at,
             updated_at=inv.updated_at,
             items=inv.items or []
@@ -327,10 +352,17 @@ def get_invoices(
     return result
 
 @router.get("/{invoice_id}")
-def get_invoice(invoice_id: str, db: Session = Depends(get_db)):
+def get_invoice(
+    invoice_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
     invoice = db.query(Invoice).filter(Invoice.id == invoice_id).first()
     if not invoice:
         raise HTTPException(status_code=404, detail="Invoice not found")
+
+    # Object-level permission check
+    check_invoice_access(invoice, current_user, "view")
 
     last_ext = db.query(ExtractionResult).filter(ExtractionResult.invoice_id == invoice_id).order_by(desc(ExtractionResult.attempt_number)).first()
     last_val = db.query(ValidationResult).filter(ValidationResult.invoice_id == invoice_id).order_by(desc(ValidationResult.id)).first()
@@ -369,6 +401,8 @@ def get_invoice(invoice_id: str, db: Session = Depends(get_db)):
             "validation_status": invoice.validation_status,
             "fraud_status": invoice.fraud_status,
             "approval_status": invoice.approval_status,
+            "uploaded_by": invoice.uploaded_by,
+            "department": getattr(invoice, "department", "General"),
             "created_at": invoice.created_at
         },
         "items": invoice.items,
@@ -378,11 +412,34 @@ def get_invoice(invoice_id: str, db: Session = Depends(get_db)):
         "gst_result": gst_result
     }
 
+@router.get("/{invoice_id}/download")
+def download_invoice(
+    invoice_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Secure, authenticated document download with object-level scoping."""
+    invoice = db.query(Invoice).filter(Invoice.id == invoice_id).first()
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+
+    check_invoice_access(invoice, current_user, "download")
+
+    if not os.path.exists(invoice.file_path):
+        raise HTTPException(status_code=404, detail="Document file not found on storage disk.")
+
+    from fastapi.responses import FileResponse
+    return FileResponse(
+        invoice.file_path,
+        media_type=invoice.file_type or "application/pdf",
+        filename=invoice.file_name or f"{invoice_id}.pdf"
+    )
+
 @router.delete("/{invoice_id}")
 def delete_invoice(
     invoice_id: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(["admin", "manager"]))
+    current_user: User = Depends(require_admin)
 ):
     invoice = db.query(Invoice).filter(Invoice.id == invoice_id).first()
     if not invoice:

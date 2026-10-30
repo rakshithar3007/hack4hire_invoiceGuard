@@ -32,6 +32,9 @@ class Settings(BaseSettings):
     GST_AGENT_ENABLED: bool = True
     GST_TOLERANCE_INR: float = 0.05
 
+    # RBAC Security Feature Flag
+    RBAC_ENFORCED: bool = True
+
     class Config:
         env_file = ".env"
         extra = "allow"

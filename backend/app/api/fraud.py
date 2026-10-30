@@ -3,15 +3,25 @@ from sqlalchemy.orm import Session
 from sqlalchemy import desc
 
 from app.database.session import get_db
-from app.models.models import Invoice, FraudAnalysis, ExtractionResult
+from app.models.models import Invoice, FraudAnalysis, ExtractionResult, User
 from app.schemas.schemas import FraudAnalysisResponse
+from app.core.permissions import get_current_active_user, check_invoice_access, require_manager_or_admin
 from app.services.fraud_service import fraud_service
 from app.services.audit_service import audit_service
 
 router = APIRouter(prefix="/invoices", tags=["Fraud Detection"])
 
 @router.get("/{invoice_id}/fraud-analysis")
-def get_fraud_analysis(invoice_id: str, db: Session = Depends(get_db)):
+def get_fraud_analysis(
+    invoice_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    invoice = db.query(Invoice).filter(Invoice.id == invoice_id).first()
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    check_invoice_access(invoice, current_user, "view_fraud")
+
     result = db.query(FraudAnalysis).filter(
         FraudAnalysis.invoice_id == invoice_id
     ).order_by(desc(FraudAnalysis.id)).first()
@@ -41,10 +51,15 @@ def get_fraud_analysis(invoice_id: str, db: Session = Depends(get_db)):
     return result
 
 @router.post("/{invoice_id}/fraud-check")
-def execute_fraud_check(invoice_id: str, db: Session = Depends(get_db)):
+def execute_fraud_check(
+    invoice_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_manager_or_admin)
+):
     invoice = db.query(Invoice).filter(Invoice.id == invoice_id).first()
     if not invoice:
         raise HTTPException(status_code=404, detail="Invoice not found")
+    check_invoice_access(invoice, current_user, "execute_fraud")
 
     last_ext = db.query(ExtractionResult).filter(
         ExtractionResult.invoice_id == invoice_id

@@ -6,10 +6,28 @@ from sqlalchemy.orm import Session
 from sqlalchemy import desc
 
 from app.database.session import get_db
-from app.models.models import Invoice, Supplier, FraudAnalysis, ValidationResult
+from app.models.models import Invoice, Supplier, FraudAnalysis, ValidationResult, User
+from app.core.permissions import get_current_active_user, ROLE_EMPLOYEE, ROLE_MANAGER, ROLE_ADMIN
+from sqlalchemy import or_
 import fitz  # PyMuPDF for PDF export
 
 router = APIRouter(prefix="/reports", tags=["Reports & Analytics"])
+
+def _scope_invoice_query(query, user: User):
+    role = (user.role or ROLE_EMPLOYEE).lower()
+    if role == ROLE_EMPLOYEE:
+        return query.filter(Invoice.uploaded_by == user.id)
+    elif role == ROLE_MANAGER:
+        dept = getattr(user, "department", "General") or "General"
+        return query.filter(
+            or_(
+                Invoice.assigned_manager_id == user.id,
+                Invoice.department == dept,
+                Invoice.department == "General",
+                Invoice.uploaded_by == user.id
+            )
+        )
+    return query
 
 @router.get("/invoices")
 def get_invoices_report(
@@ -17,9 +35,12 @@ def get_invoices_report(
     validation_status: Optional[str] = None,
     fraud_status: Optional[str] = None,
     approval_status: Optional[str] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
 ):
     query = db.query(Invoice).order_by(desc(Invoice.created_at))
+    query = _scope_invoice_query(query, current_user)
+
     if supplier_id: query = query.filter(Invoice.supplier_id == supplier_id)
     if validation_status: query = query.filter(Invoice.validation_status.ilike(validation_status))
     if fraud_status: query = query.filter(Invoice.fraud_status.ilike(fraud_status))
@@ -43,8 +64,12 @@ def get_invoices_report(
     return {"count": len(rows), "data": rows}
 
 @router.get("/export/csv")
-def export_csv(db: Session = Depends(get_db)):
-    invoices = db.query(Invoice).order_by(desc(Invoice.created_at)).all()
+def export_csv(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    query = db.query(Invoice).order_by(desc(Invoice.created_at))
+    invoices = _scope_invoice_query(query, current_user).all()
     output = io.StringIO()
     writer = csv.writer(output)
     
@@ -78,8 +103,12 @@ def export_csv(db: Session = Depends(get_db)):
     )
 
 @router.get("/export/pdf")
-def export_pdf(db: Session = Depends(get_db)):
-    invoices = db.query(Invoice).order_by(desc(Invoice.created_at)).all()
+def export_pdf(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    query = db.query(Invoice).order_by(desc(Invoice.created_at))
+    invoices = _scope_invoice_query(query, current_user).all()
 
     # Create PDF document with PyMuPDF
     doc = fitz.open()

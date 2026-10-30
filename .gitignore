@@ -1,78 +1,162 @@
-# ==========================================
-# InvoiceGuard AI - Root .gitignore
-# ==========================================
+# ==============================================================================
+# InvoiceGuard AI - Enterprise Repository .gitignore
+# ==============================================================================
 
-# ---- Environment & Secrets ----
+# ------------------------------------------------------------------------------
+# 1. Environment Variables & Secrets (NEVER commit credentials)
+# ------------------------------------------------------------------------------
 .env
 .env.local
+.env.development.local
+.env.test.local
+.env.production.local
 .env.*.local
+backend/.env
+backend/.env.*
+frontend/.env
+frontend/.env.*
 !.env.example
+!backend/.env.example
+!frontend/.env.example
+*.pem
+*.key
+*.cert
+*.p12
 
-# ---- Python / Backend ----
+# ------------------------------------------------------------------------------
+# 2. Python Backend & Testing
+# ------------------------------------------------------------------------------
 __pycache__/
+*/__pycache__/
+*/*/__pycache__/
+*/*/*/__pycache__/
 *.py[cod]
 *$py.class
 *.so
-*.egg-info/
-*.egg
-dist/
+*.pyd
+*.pyo
+
+# Distribution / Packaging
 build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
 *.whl
 .Python
 pip-log.txt
 pip-delete-this-directory.txt
-*.pyo
-*.pyd
+
+# Testing & Coverage
 .pytest_cache/
-htmlcov/
+*/.pytest_cache/
 .coverage
 .coverage.*
-.mypy_cache/
-.ruff_cache/
+htmlcov/
 .tox/
-.venv/
-venv/
-env/
-ENV/
+.nox/
+.hypothesis/
+coverage.xml
+*.cover
+.ruff_cache/
+.mypy_cache/
 
-# ---- Database ----
+# Virtual Environments
+.venv/
+*/.venv/
+venv/
+*/venv/
+env/
+*/env/
+ENV/
+*/ENV/
+backend/venv/
+backend/.venv/
+
+# ------------------------------------------------------------------------------
+# 3. Database & Ephemeral Data
+# ------------------------------------------------------------------------------
 *.db
-*.sqlite3
 *.sqlite
+*.sqlite3
+*.db-journal
+*.db-wal
+*.db-shm
 backend/*.db
 backend/*.sqlite3
+backend/*.sqlite
+backend/invoiceguard.db
 
-# ---- Storage / Uploaded Files ----
+# ------------------------------------------------------------------------------
+# 4. Storage & Uploaded Invoices (Preserve structure via .gitkeep)
+# ------------------------------------------------------------------------------
 storage/invoices/*
+!storage/invoices/
 !storage/invoices/.gitkeep
-backend/storage/*
+backend/storage/invoices/*
+!backend/storage/
 !backend/storage/.gitkeep
+!backend/storage/invoices/
+!backend/storage/invoices/.gitkeep
+uploads/
+*/uploads/
+tmp/
+temp/
 
-# ---- Node / Frontend ----
+# ------------------------------------------------------------------------------
+# 5. Node.js & React Frontend
+# ------------------------------------------------------------------------------
 node_modules/
+*/node_modules/
+frontend/node_modules/
+
+# Frontend Build outputs
 frontend/dist/
 frontend/dist-ssr/
-*.local
+dist/
+
+# TypeScript / Vite Cache
+*.tsbuildinfo
+.vite/
+frontend/.vite/
+*/.vite/
+
+# Node logs
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
-.vite/
 
-# ---- Logs ----
-logs/
-*.log
-
-# ---- OS Generated ----
+# ------------------------------------------------------------------------------
+# 6. Operating System Specific Files
+# ------------------------------------------------------------------------------
 .DS_Store
-Thumbs.db
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
 ehthumbs.db
+Thumbs.db
 Desktop.ini
 $RECYCLE.BIN/
 *.lnk
 
-# ---- IDE / Editor ----
+# ------------------------------------------------------------------------------
+# 7. IDEs & Editors
+# ------------------------------------------------------------------------------
 .vscode/*
 !.vscode/extensions.json
 !.vscode/settings.json
@@ -83,9 +167,14 @@ $RECYCLE.BIN/
 *.sln
 *.sw?
 *~
+*.sublime-project
+*.sublime-workspace
 
-# ---- Misc ----
+# ------------------------------------------------------------------------------
+# 8. Temporary & Backup Files
+# ------------------------------------------------------------------------------
 *.bak
 *.tmp
 *.temp
 *.orig
+*.rej

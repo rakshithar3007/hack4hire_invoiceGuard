@@ -7,6 +7,7 @@ from app.database.session import get_db
 from app.models.models import Invoice, ExtractionResult, User
 from app.schemas.schemas import ExtractionUpdateRequest, ReExtractRequest
 from app.core.security import get_current_user_optional
+from app.core.permissions import get_current_active_user, check_invoice_access, require_manager_or_admin
 from app.services.extraction_service import extraction_service
 from app.services.ocr_service import ocr_service
 from app.services.reextraction_service import reextraction_service
@@ -18,7 +19,17 @@ from app.services.audit_service import audit_service
 router = APIRouter(prefix="/invoices", tags=["Extraction"])
 
 @router.get("/{invoice_id}/extraction")
-def get_extraction(invoice_id: str, db: Session = Depends(get_db)):
+def get_extraction(
+    invoice_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    invoice = db.query(Invoice).filter(Invoice.id == invoice_id).first()
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+
+    check_invoice_access(invoice, current_user, "view_extraction")
+
     result = db.query(ExtractionResult).filter(
         ExtractionResult.invoice_id == invoice_id
     ).order_by(desc(ExtractionResult.attempt_number)).first()
@@ -28,10 +39,16 @@ def get_extraction(invoice_id: str, db: Session = Depends(get_db)):
     return result
 
 @router.post("/{invoice_id}/extract")
-def run_extraction(invoice_id: str, db: Session = Depends(get_db)):
+def run_extraction(
+    invoice_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
     invoice = db.query(Invoice).filter(Invoice.id == invoice_id).first()
     if not invoice:
         raise HTTPException(status_code=404, detail="Invoice not found")
+
+    check_invoice_access(invoice, current_user, "extract")
 
     ocr_res = ocr_service.extract_from_file(invoice.file_path)
     extraction = extraction_service.parse_invoice_text(ocr_res["text"], invoice.file_name)
@@ -154,16 +171,35 @@ def update_extraction(
     }
 
 @router.post("/{invoice_id}/re-extract")
-def trigger_re_extraction(invoice_id: str, payload: ReExtractRequest, db: Session = Depends(get_db)):
+def trigger_re_extraction(
+    invoice_id: str,
+    payload: ReExtractRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
     """
     Executes independent checker re-extraction loop up to 3 attempts.
     """
+    invoice = db.query(Invoice).filter(Invoice.id == invoice_id).first()
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    check_invoice_access(invoice, current_user, "re_extract")
+
     result = reextraction_service.re_extract(invoice_id, payload.strategy or "heuristic_ai", db)
     return result
 
 @router.get("/{invoice_id}/checker")
-def get_checker_status(invoice_id: str, db: Session = Depends(get_db)):
+def get_checker_status(
+    invoice_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
     """
     Returns independent checker verification result ('CHECKER PASSED?').
     """
+    invoice = db.query(Invoice).filter(Invoice.id == invoice_id).first()
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    check_invoice_access(invoice, current_user, "checker")
+
     return reextraction_service.run_independent_checker(invoice_id, db)

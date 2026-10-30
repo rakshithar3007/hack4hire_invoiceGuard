@@ -84,9 +84,9 @@ def seed_demo_data(db, force_reset_demo: bool = False):
 
     # 1. Seed or retrieve Users
     users_data = [
-        {"name": "Admin User", "email": "admin@invoiceguard.ai", "password": "Admin@123", "role": "admin"},
-        {"name": "Alex Employee", "email": "employee@invoiceguard.ai", "password": "Employee@123", "role": "employee"},
-        {"name": "Sarah Manager", "email": "manager@invoiceguard.ai", "password": "Manager@123", "role": "manager"}
+        {"name": "Admin User", "email": "admin@invoiceguard.ai", "password": "Admin@123", "role": "admin", "department": "Operations", "approval_limit": None, "is_active": True},
+        {"name": "Alex Employee", "email": "employee@invoiceguard.ai", "password": "Employee@123", "role": "employee", "department": "Engineering", "approval_limit": 0.0, "is_active": True},
+        {"name": "Sarah Manager", "email": "manager@invoiceguard.ai", "password": "Manager@123", "role": "manager", "department": "Engineering", "approval_limit": 100000.0, "is_active": True}
     ]
     user_map = {}
     for ud in users_data:
@@ -96,15 +96,43 @@ def seed_demo_data(db, force_reset_demo: bool = False):
                 name=ud["name"],
                 email=ud["email"],
                 password_hash=get_password_hash(ud["password"]),
-                role=ud["role"]
+                role=ud["role"],
+                department=ud.get("department", "General"),
+                approval_limit=ud.get("approval_limit"),
+                is_active=ud.get("is_active", True)
             )
             db.add(u)
             db.commit()
             db.refresh(u)
+        else:
+            # Safely backfill any missing RBAC fields on existing seed records
+            updated = False
+            if hasattr(u, "department") and not u.department:
+                u.department = ud.get("department", "General")
+                updated = True
+            if hasattr(u, "approval_limit") and u.approval_limit is None and ud.get("approval_limit") is not None:
+                u.approval_limit = ud.get("approval_limit")
+                updated = True
+            if hasattr(u, "is_active") and u.is_active is None:
+                u.is_active = True
+                updated = True
+            if updated:
+                db.commit()
         user_map[ud["role"]] = u
 
     employee_user = user_map.get("employee")
     manager_user = user_map.get("manager")
+
+    # Safely backfill demo invoices with department and assigned_manager_id
+    db.query(Invoice).filter(Invoice.id.in_(DEMO_INVOICE_IDS)).update(
+        {
+            Invoice.department: "Engineering",
+            Invoice.assigned_manager_id: manager_user.id if manager_user else None,
+            Invoice.uploaded_by: employee_user.id if employee_user else None
+        },
+        synchronize_session=False
+    )
+    db.commit()
 
     # 2. Seed Suppliers
     suppliers_data = [
@@ -565,10 +593,35 @@ def seed_demo_data(db, force_reset_demo: bool = False):
     db.commit()
     print("Database successfully verified and seeded with complete realistic test cases.")
 
+def migrate_sqlite_columns():
+    """Safely adds missing RBAC columns to existing SQLite tables if not present."""
+    from sqlalchemy import text
+    try:
+        with engine.connect() as conn:
+            # Check users table columns
+            user_cols = [row[1] for row in conn.execute(text("PRAGMA table_info(users)"))]
+            if "is_active" not in user_cols:
+                conn.execute(text("ALTER TABLE users ADD COLUMN is_active BOOLEAN DEFAULT 1"))
+            if "department" not in user_cols:
+                conn.execute(text("ALTER TABLE users ADD COLUMN department VARCHAR(100) DEFAULT 'General'"))
+            if "approval_limit" not in user_cols:
+                conn.execute(text("ALTER TABLE users ADD COLUMN approval_limit FLOAT DEFAULT 100000.0"))
+
+            # Check invoices table columns
+            inv_cols = [row[1] for row in conn.execute(text("PRAGMA table_info(invoices)"))]
+            if "department" not in inv_cols:
+                conn.execute(text("ALTER TABLE invoices ADD COLUMN department VARCHAR(100) DEFAULT 'General'"))
+            if "assigned_manager_id" not in inv_cols:
+                conn.execute(text("ALTER TABLE invoices ADD COLUMN assigned_manager_id INTEGER REFERENCES users(id)"))
+            conn.commit()
+    except Exception as e:
+        print(f"Column migration notice (normal if fresh DB): {e}")
+
 def init_database():
     """Initializes SQLite tables safely and seeds baseline demo records."""
     os.makedirs(settings.STORAGE_DIR, exist_ok=True)
     Base.metadata.create_all(bind=engine)
+    migrate_sqlite_columns()
     db = SessionLocal()
     try:
         seed_demo_data(db, force_reset_demo=False)
